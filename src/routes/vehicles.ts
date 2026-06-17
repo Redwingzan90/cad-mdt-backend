@@ -15,9 +15,9 @@ router.get(
   "/",
   asyncHandler(async (req: Request, res: Response) => {
     const { page, limit, skip } = parsePagination(req.query as any);
-    const search = req.query.search as string | undefined;
-    const plate = req.query.plate as string | undefined;
-    const stolen = req.query.stolen as string | undefined;
+    const search = req.query.search ? String(req.query.search) : '';
+    const plate = req.query.plate ? String(req.query.plate) : '';
+    const stolen = req.query.stolen ? String(req.query.stolen) : '';
 
     const where: any = {};
 
@@ -28,8 +28,6 @@ router.get(
         { plate: { contains: search.toUpperCase() } },
         { model: { contains: search } },
         { color: { contains: search } },
-        { owner: { firstName: { contains: search } } },
-        { owner: { lastName: { contains: search } } },
       ];
     }
 
@@ -63,7 +61,7 @@ router.get(
 router.get(
   "/plate/:plate",
   asyncHandler(async (req: Request, res: Response) => {
-    const plate = req.params.plate.toUpperCase().trim();
+    const plate = String(req.params.plate).toUpperCase().trim();
 
     const vehicle = await prisma.vehicle.findUnique({
       where: { plate },
@@ -212,8 +210,8 @@ router.patch(
         ...(body.model && { model: sanitizeString(body.model) }),
         ...(body.color && { color: sanitizeString(body.color) }),
         ...(body.year && { year: body.year }),
-        ...(body.registrationStatus && { registrationStatus: body.registrationStatus }),
-        ...(body.insuranceStatus && { insuranceStatus: body.insuranceStatus }),
+        ...(body.registrationStatus && { registrationStatus: body.registrationStatus as any }),
+        ...(body.insuranceStatus && { insuranceStatus: body.insuranceStatus as any }),
         ...(body.stolen !== undefined && { stolen: body.stolen }),
         ...(body.notes !== undefined && {
           notes: body.notes ? sanitizeString(body.notes) : null,

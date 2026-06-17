@@ -16,7 +16,7 @@ router.get(
   "/incidents",
   asyncHandler(async (req: Request, res: Response) => {
     const { page, limit, skip } = parsePagination(req.query as any);
-    const status = req.query.status as string | undefined;
+    const status = req.query.status ? String(req.query.status) : undefined;
 
     const where: any = {};
     if (status) where.status = status;
@@ -266,7 +266,7 @@ router.get(
   "/investigations",
   asyncHandler(async (req: Request, res: Response) => {
     const { page, limit, skip } = parsePagination(req.query as any);
-    const status = req.query.status as string | undefined;
+    const status = req.query.status ? String(req.query.status) : undefined;
 
     const where: any = {};
     if (status) where.status = status;
@@ -337,7 +337,8 @@ router.post(
   "/:type/:id/approve",
   requirePermission("supervisor", "admin"),
   asyncHandler(async (req: Request, res: Response) => {
-    const { type, id } = req.params;
+    const type = String(req.params.type);
+    const id = String(req.params.id);
     const { signatureData } = req.body;
 
     const tableMap: Record<string, any> = {
@@ -372,7 +373,8 @@ router.delete(
   "/:type/:id",
   requirePermission("admin"),
   asyncHandler(async (req: Request, res: Response) => {
-    const { type, id } = req.params;
+    const type = String(req.params.type);
+    const id = String(req.params.id);
 
     const tableMap: Record<string, any> = {
       incidents: prisma.incidentReport,

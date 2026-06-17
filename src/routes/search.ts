@@ -10,9 +10,10 @@ const router = Router();
 router.get(
   "/",
   asyncHandler(async (req: Request, res: Response) => {
-    const query = req.query.q as string;
+    const query = String(req.query.q || '');
     if (!query || query.length < 2) {
-      return res.json({ civilians: [], vehicles: [], officers: [], reports: [] });
+      res.json({ civilians: [], vehicles: [], officers: [], reports: [] });
+      return;
     }
 
     const searchTerm = query.trim();

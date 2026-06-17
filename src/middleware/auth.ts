@@ -131,7 +131,7 @@ export function generateToken(user: { id: string; username: string }): string {
   return jwt.sign(
     { id: user.id, username: user.username },
     secret,
-    { expiresIn: process.env.JWT_EXPIRES_IN || "24h" }
+    { expiresIn: process.env.JWT_EXPIRES_IN || "24h" } as jwt.SignOptions
   );
 }
 

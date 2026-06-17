@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 
-type RouteHandler = (req: Request, res: Response, next: NextFunction) => Promise<void>;
+type RouteHandler = (req: Request, res: Response, next: NextFunction) => Promise<any>;
 
 /**
  * Wrap async route handlers to catch errors
