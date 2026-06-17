@@ -1,0 +1,907 @@
+// Police CAD/MDT System - Database Schema
+// PostgreSQL + Prisma ORM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// USERS & AUTHENTICATION
+// ============================================================
+
+model User {
+  id            String   @id @default(uuid())
+  username      String   @unique @db.VarChar(64)
+  passwordHash  String   @map("password_hash") @db.VarChar(255)
+  email         String?  @unique @db.VarChar(128)
+  discordId     String?  @unique @map("discord_id") @db.VarChar(64)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  officer       Officer?
+  sessions      Session[]
+  auditLogs     AuditLog[]
+  permissions   UserPermission[]
+  department    Department? @relation("DepartmentHead")
+
+  @@map("users")
+}
+
+model Session {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  token       String   @unique @db.VarChar(512)
+  expiresAt   DateTime @map("expires_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  name        String   @unique @db.VarChar(64)
+  description String?  @db.VarChar(255)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  userPermissions UserPermission[]
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique @db.VarChar(64)
+  description String?  @db.VarChar(255)
+  level       Int      @default(0) // Higher = more authority
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  rolePermissions RolePermission[]
+  officers        Officer[]
+
+  @@map("roles")
+}
+
+model UserPermission {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  permissionId String   @map("permission_id")
+  granted      Boolean  @default(true)
+  grantedBy    String?  @map("granted_by")
+  grantedAt    DateTime @default(now()) @map("granted_at")
+
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permissionId])
+  @@map("user_permissions")
+}
+
+model RolePermission {
+  id           String   @id @default(uuid())
+  roleId       String   @map("role_id")
+  permissionId String   @map("permission_id")
+
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// ============================================================
+// DEPARTMENTS & RANKS
+// ============================================================
+
+model Department {
+  id          String   @id @default(uuid())
+  name        String   @unique @db.VarChar(64)
+  code        String   @unique @db.VarChar(16)
+  color       String?  @db.VarChar(7) // hex color
+  headUserId  String?  @unique @map("head_user_id")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  headUser    User?    @relation("DepartmentHead", fields: [headUserId], references: [id])
+  officers    Officer[]
+  ranks       Rank[]
+  calls       DispatchCall[]
+  units       Unit[]
+
+  @@map("departments")
+}
+
+model Rank {
+  id           String   @id @default(uuid())
+  name         String   @db.VarChar(64)
+  departmentId String   @map("department_id")
+  level        Int      @default(0) // Higher = more authority
+  badgePrefix  String?  @map("badge_prefix") @db.VarChar(8)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  officers     Officer[]
+
+  @@unique([name, departmentId])
+  @@map("ranks")
+}
+
+// ============================================================
+// OFFICERS
+// ============================================================
+
+model Officer {
+  id              String    @id @default(uuid())
+  userId          String    @unique @map("user_id")
+  firstName       String    @map("first_name") @db.VarChar(64)
+  lastName        String    @map("last_name") @db.VarChar(64)
+  badgeNumber     String    @unique @map("badge_number") @db.VarChar(16)
+  departmentId    String    @map("department_id")
+  rankId          String    @map("rank_id")
+  roleId          String?   @map("role_id")
+  callsign        String?   @db.VarChar(32)
+  phone           String?   @db.VarChar(20)
+  imageUrl        String?   @map("image_url") @db.VarChar(512)
+  status          OfficerStatus @default(OFF_DUTY)
+  statusDetail    String?   @map("status_detail") @db.VarChar(64)
+  active          Boolean   @default(true)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department      Department @relation(fields: [departmentId], references: [id])
+  rank            Rank      @relation(fields: [rankId], references: [id])
+  role            Role?     @relation(fields: [roleId], references: [id])
+  certifications  Certification[]
+  trainingRecords TrainingRecord[]
+  notes           OfficerNote[]
+  disciplinary    DisciplinaryRecord[]
+  equipment       Equipment[]
+  arrests         ArrestReport[]
+  citations       Citation[]
+  warnings        Warning[]
+  incidentReports IncidentReport[]
+  crashReports    CrashReport[]
+  useOfForceReports UseOfForceReport[]
+  investigations  InvestigationReport[]
+  assignedCalls   CallAssignment[]
+  createdCalls    DispatchCall[]      @relation("CallCreator")
+  handledCalls    DispatchCall[]      @relation("CallHandler")
+  boloCreator     Bolo[]              @relation("BoloCreator")
+  evidenceItems   Evidence[]
+  unit            Unit?
+
+  @@map("officers")
+}
+
+enum OfficerStatus {
+  AVAILABLE
+  BUSY
+  EN_ROUTE
+  ON_SCENE
+  TRANSPORTING
+  OUT_OF_SERVICE
+  BREAK
+  OFF_DUTY
+}
+
+model Certification {
+  id          String    @id @default(uuid())
+  officerId   String    @map("officer_id")
+  name        String    @db.VarChar(128)
+  issuedAt    DateTime  @map("issued_at")
+  expiresAt   DateTime? @map("expires_at")
+  issuedBy    String?   @db.VarChar(128)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  officer     Officer   @relation(fields: [officerId], references: [id], onDelete: Cascade)
+
+  @@map("certifications")
+}
+
+model TrainingRecord {
+  id          String    @id @default(uuid())
+  officerId   String    @map("officer_id")
+  course      String    @db.VarChar(128)
+  completedAt DateTime  @map("completed_at")
+  score       String?   @db.VarChar(16)
+  notes       String?   @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  officer     Officer   @relation(fields: [officerId], references: [id], onDelete: Cascade)
+
+  @@map("training_records")
+}
+
+model OfficerNote {
+  id          String    @id @default(uuid())
+  officerId   String    @map("officer_id")
+  content     String    @db.Text
+  createdBy   String    @map("created_by") @db.VarChar(128)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  officer     Officer   @relation(fields: [officerId], references: [id], onDelete: Cascade)
+
+  @@map("officer_notes")
+}
+
+model DisciplinaryRecord {
+  id          String    @id @default(uuid())
+  officerId   String    @map("officer_id")
+  type        String    @db.VarChar(64)
+  description String    @db.Text
+  severity    Int       @default(1) // 1-5
+  action      String?   @db.VarChar(255)
+  issuedBy    String    @map("issued_by") @db.VarChar(128)
+  issuedAt    DateTime  @default(now()) @map("issued_at")
+  expiresAt   DateTime? @map("expires_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  officer     Officer   @relation(fields: [officerId], references: [id], onDelete: Cascade)
+
+  @@map("disciplinary_records")
+}
+
+model Equipment {
+  id          String    @id @default(uuid())
+  officerId   String    @map("officer_id")
+  name        String    @db.VarChar(128)
+  serial      String?   @db.VarChar(64)
+  assignedAt  DateTime  @default(now()) @map("assigned_at")
+  returnedAt  DateTime? @map("returned_at")
+  condition   String?   @db.VarChar(32)
+  notes       String?   @db.Text
+
+  officer     Officer   @relation(fields: [officerId], references: [id], onDelete: Cascade)
+
+  @@map("equipment")
+}
+
+// ============================================================
+// UNITS (ACTIVE PATROL)
+// ============================================================
+
+model Unit {
+  id          String    @id @default(uuid())
+  officerId   String    @unique @map("officer_id")
+  callsign    String    @db.VarChar(32)
+  departmentId String   @map("department_id")
+  status      UnitStatus @default(AVAILABLE)
+  vehicle     String?   @db.VarChar(64)
+  lastLat     Float?    @map("last_lat")
+  lastLng     Float?    @map("last_lng")
+  lastUpdate  DateTime? @map("last_update")
+  onDutyAt    DateTime  @default(now()) @map("on_duty_at")
+  offDutyAt   DateTime? @map("off_duty_at")
+
+  officer     Officer    @relation(fields: [officerId], references: [id])
+  department  Department @relation(fields: [departmentId], references: [id])
+
+  @@map("units")
+}
+
+enum UnitStatus {
+  AVAILABLE
+  BUSY
+  EN_ROUTE
+  ON_SCENE
+  TRANSPORTING
+  OUT_OF_SERVICE
+  BREAK
+}
+
+// ============================================================
+// DISPATCH & CALLS
+// ============================================================
+
+model DispatchCall {
+  id            String      @id @default(uuid())
+  callNumber    String      @unique @map("call_number") @db.VarChar(32)
+  type          String      @db.VarChar(64)
+  description   String      @db.Text
+  location      String      @db.VarChar(255)
+  lat           Float?
+  lng           Float?
+  priority      CallPriority @default(PRIORITY_3)
+  status        CallStatus  @default(PENDING)
+  departmentId  String      @map("department_id")
+  creatorId     String      @map("creator_id")
+  handlerId     String?     @map("handler_id")
+  completedAt   DateTime?   @map("completed_at")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  department    Department  @relation(fields: [departmentId], references: [id])
+  creator       Officer     @relation("CallCreator", fields: [creatorId], references: [id])
+  handler       Officer?    @relation("CallHandler", fields: [handlerId], references: [id])
+  assignments   CallAssignment[]
+  notes         CallNote[]
+  units         CallUnit[]
+
+  @@index([status])
+  @@index([priority])
+  @@index([departmentId])
+  @@map("dispatch_calls")
+}
+
+enum CallPriority {
+  PRIORITY_1
+  PRIORITY_2
+  PRIORITY_3
+  PRIORITY_4
+}
+
+enum CallStatus {
+  PENDING
+  ASSIGNED
+  EN_ROUTE
+  ON_SCENE
+  COMPLETED
+  CANCELLED
+}
+
+model CallAssignment {
+  id          String    @id @default(uuid())
+  callId      String    @map("call_id")
+  officerId   String    @map("officer_id")
+  assignedAt  DateTime  @default(now()) @map("assigned_at")
+  arrivedAt   DateTime? @map("arrived_at")
+  clearedAt   DateTime? @map("cleared_at")
+
+  call        DispatchCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+  officer     Officer      @relation(fields: [officerId], references: [id])
+
+  @@unique([callId, officerId])
+  @@map("call_assignments")
+}
+
+model CallNote {
+  id          String       @id @default(uuid())
+  callId      String       @map("call_id")
+  content     String       @db.Text
+  createdBy   String       @map("created_by") @db.VarChar(128)
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  call        DispatchCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@map("call_notes")
+}
+
+model CallUnit {
+  id          String       @id @default(uuid())
+  callId      String       @map("call_id")
+  unitId      String       @map("unit_id")
+  assignedAt  DateTime     @default(now()) @map("assigned_at")
+
+  call        DispatchCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@map("call_units")
+}
+
+// ============================================================
+// 911 CALLS
+// ============================================================
+
+model EmergencyCall {
+  id            String    @id @default(uuid())
+  callerName    String    @map("caller_name") @db.VarChar(128)
+  callerPhone   String?   @map("caller_phone") @db.VarChar(20)
+  description   String    @db.Text
+  location      String    @db.VarChar(255)
+  lat           Float?
+  lng           Float?
+  type          String    @db.VarChar(64)
+  status        EmergencyCallStatus @default(PENDING)
+  linkedCallId  String?   @map("linked_call_id")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@map("emergency_calls")
+}
+
+enum EmergencyCallStatus {
+  PENDING
+  DISPATCHED
+  RESOLVED
+  FALSE_ALARM
+}
+
+// ============================================================
+// CIVILIAN DATABASE
+// ============================================================
+
+model Civilian {
+  id              String    @id @default(uuid())
+  firstName       String    @map("first_name") @db.VarChar(64)
+  lastName        String    @map("last_name") @db.VarChar(64)
+  dateOfBirth     DateTime  @map("date_of_birth")
+  gender          String?   @db.VarChar(16)
+  ethnicity       String?   @db.VarChar(32)
+  address         String?   @db.VarChar(255)
+  phone           String?   @db.VarChar(20)
+  imageUrl        String?   @map("image_url") @db.VarChar(512)
+  notes           String?   @db.Text
+  active          Boolean   @default(true)
+  // Multi-character: links this civilian to a FiveM player
+  playerIdentifier String?  @map("player_identifier") @db.VarChar(128)
+  isActive        Boolean   @default(false) @map("is_active") // Active character for this player
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  licenses      License[]
+  vehicles      Vehicle[]
+  arrests       ArrestReport[]
+  citations     Citation[]
+  warnings      Warning[]
+  warrants      Warrant[]
+  incidentInvolved IncidentReport[] @relation("IncidentCivilians")
+  crashInvolved    CrashReport[]    @relation("CrashCivilians")
+  boloTarget       Bolo[]           @relation("BoloTarget")
+
+  @@index([firstName, lastName])
+  @@index([dateOfBirth])
+  @@index([playerIdentifier])
+  @@map("civilians")
+}
+
+model License {
+  id            String    @id @default(uuid())
+  civilianId    String    @map("civilian_id")
+  type          String    @db.VarChar(32) // drivers, weapon, hunting, fishing, pilot
+  number        String    @unique @db.VarChar(32)
+  issuedAt      DateTime  @map("issued_at")
+  expiresAt     DateTime? @map("expires_at")
+  status        LicenseStatus @default(VALID)
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  civilian      Civilian  @relation(fields: [civilianId], references: [id], onDelete: Cascade)
+
+  @@map("licenses")
+}
+
+enum LicenseStatus {
+  VALID
+  EXPIRED
+  SUSPENDED
+  REVOKED
+}
+
+// ============================================================
+// VEHICLES
+// ============================================================
+
+model Vehicle {
+  id              String    @id @default(uuid())
+  plate           String    @unique @db.VarChar(16)
+  model           String    @db.VarChar(64)
+  color           String    @db.VarChar(32)
+  year            Int?
+  vin             String?   @unique @db.VarChar(32)
+  ownerId         String    @map("owner_id")
+  registrationStatus RegistrationStatus @default(VALID)
+  insuranceStatus InsuranceStatus @default(VALID)
+  stolen          Boolean   @default(false)
+  flags           String?   @db.Text // JSON array of flags
+  notes           String?   @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  owner           Civilian  @relation(fields: [ownerId], references: [id])
+  boloVehicles    Bolo[]    @relation("BoloVehicle")
+  crashVehicles   CrashVehicle[]
+
+  @@index([plate])
+  @@index([ownerId])
+  @@map("vehicles")
+}
+
+enum RegistrationStatus {
+  VALID
+  EXPIRED
+  NONE
+}
+
+enum InsuranceStatus {
+  VALID
+  EXPIRED
+  NONE
+}
+
+// ============================================================
+// CRIMINAL RECORDS
+// ============================================================
+
+model ArrestReport {
+  id              String    @id @default(uuid())
+  reportNumber    String    @unique @map("report_number") @db.VarChar(32)
+  officerId       String    @map("officer_id")
+  civilianId      String    @map("civilian_id")
+  location        String    @db.VarChar(255)
+  dateTime        DateTime  @map("date_time")
+  narrative       String    @db.Text
+  charges         String    @db.Text // JSON array of charges
+  jailTimeDays    Int?      @map("jail_time_days")
+  mirandaRead     Boolean   @map("miranda_read") @default(false)
+  courtStatus     CourtStatus @default(PENDING)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  officer         Officer   @relation(fields: [officerId], references: [id])
+  civilian        Civilian  @relation(fields: [civilianId], references: [id])
+  evidenceItems   Evidence[]
+
+  @@map("arrest_reports")
+}
+
+enum CourtStatus {
+  PENDING
+  SCHEDULED
+  IN_PROGRESS
+  CONVICTED
+  DISMISSED
+  ACQUITTED
+}
+
+model Citation {
+  id              String    @id @default(uuid())
+  citationNumber  String    @unique @map("citation_number") @db.VarChar(32)
+  officerId       String    @map("officer_id")
+  civilianId      String    @map("civilian_id")
+  location        String    @db.VarChar(255)
+  dateTime        DateTime  @map("date_time")
+  violation       String    @db.VarChar(255)
+  amount          Decimal?  @db.Decimal(10, 2)
+  description     String?   @db.Text
+  status          CitationStatus @default(UNPAID)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  officer         Officer   @relation(fields: [officerId], references: [id])
+  civilian        Civilian  @relation(fields: [civilianId], references: [id])
+
+  @@map("citations")
+}
+
+enum CitationStatus {
+  UNPAID
+  PAID
+  CONTESTED
+  DISMISSED
+}
+
+model Warning {
+  id              String    @id @default(uuid())
+  officerId       String    @map("officer_id")
+  civilianId      String    @map("civilian_id")
+  type            String    @db.VarChar(64)
+  description     String    @db.Text
+  location        String?   @db.VarChar(255)
+  dateTime        DateTime  @map("date_time")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  officer         Officer   @relation(fields: [officerId], references: [id])
+  civilian        Civilian  @relation(fields: [civilianId], references: [id])
+
+  @@map("warnings")
+}
+
+model Warrant {
+  id              String        @id @default(uuid())
+  warrantNumber   String        @unique @map("warrant_number") @db.VarChar(32)
+  civilianId      String        @map("civilian_id")
+  type            String        @db.VarChar(64) // arrest, search, bench
+  charges         String        @db.Text
+  issuedBy        String        @map("issued_by") @db.VarChar(128)
+  issuedAt        DateTime      @map("issued_at")
+  expiresAt       DateTime?     @map("expires_at")
+  status          WarrantStatus @default(ACTIVE)
+  notes           String?       @db.Text
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  civilian        Civilian      @relation(fields: [civilianId], references: [id])
+
+  @@map("warrants")
+}
+
+enum WarrantStatus {
+  ACTIVE
+  SERVED
+  EXPIRED
+  RECALLED
+}
+
+// ============================================================
+// INCIDENT / CRASH / USE OF FORCE / INVESTIGATION REPORTS
+// ============================================================
+
+model IncidentReport {
+  id              String    @id @default(uuid())
+  reportNumber    String    @unique @map("report_number") @db.VarChar(32)
+  officerId       String    @map("officer_id")
+  location        String    @db.VarChar(255)
+  dateTime        DateTime  @map("date_time")
+  type            String    @db.VarChar(64)
+  narrative       String    @db.Text
+  status          ReportStatus @default(DRAFT)
+  approvedBy      String?   @map("approved_by") @db.VarChar(128)
+  approvedAt      DateTime? @map("approved_at")
+  signatureData   String?   @map("signature_data") @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  officer         Officer   @relation(fields: [officerId], references: [id])
+  civilians       Civilian[] @relation("IncidentCivilians")
+  evidenceItems   Evidence[]
+
+  @@map("incident_reports")
+}
+
+model CrashReport {
+  id              String    @id @default(uuid())
+  reportNumber    String    @unique @map("report_number") @db.VarChar(32)
+  officerId       String    @map("officer_id")
+  location        String    @db.VarChar(255)
+  dateTime        DateTime  @map("date_time")
+  narrative       String    @db.Text
+  weather         String?   @db.VarChar(32)
+  roadConditions  String?   @map("road_conditions") @db.VarChar(64)
+  injuries        Boolean   @default(false)
+  fatalities      Boolean   @default(false)
+  status          ReportStatus @default(DRAFT)
+  approvedBy      String?   @map("approved_by") @db.VarChar(128)
+  approvedAt      DateTime? @map("approved_at")
+  signatureData   String?   @map("signature_data") @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  officer         Officer   @relation(fields: [officerId], references: [id])
+  civilians       Civilian[] @relation("CrashCivilians")
+  vehicles        CrashVehicle[]
+  evidenceItems   Evidence[]
+
+  @@map("crash_reports")
+}
+
+model CrashVehicle {
+  id            String    @id @default(uuid())
+  crashReportId String    @map("crash_report_id")
+  vehicleId     String    @map("vehicle_id")
+  damageDesc    String?   @map("damage_desc") @db.Text
+  towed         Boolean   @default(false)
+
+  crashReport   CrashReport @relation(fields: [crashReportId], references: [id], onDelete: Cascade)
+  vehicle       Vehicle     @relation(fields: [vehicleId], references: [id])
+
+  @@unique([crashReportId, vehicleId])
+  @@map("crash_vehicles")
+}
+
+model UseOfForceReport {
+  id              String    @id @default(uuid())
+  reportNumber    String    @unique @map("report_number") @db.VarChar(32)
+  officerId       String    @map("officer_id")
+  location        String    @db.VarChar(255)
+  dateTime        DateTime  @map("date_time")
+  forceType       String    @map("force_type") @db.VarChar(64)
+  subjectName     String    @map("subject_name") @db.VarChar(128)
+  narrative       String    @db.Text
+  witnessInfo     String?   @map("witness_info") @db.Text
+  injuries        String?   @db.Text
+  medicalAttention Boolean  @map("medical_attention") @default(false)
+  status          ReportStatus @default(DRAFT)
+  approvedBy      String?   @map("approved_by") @db.VarChar(128)
+  approvedAt      DateTime? @map("approved_at")
+  signatureData   String?   @map("signature_data") @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  officer         Officer   @relation(fields: [officerId], references: [id])
+
+  @@map("use_of_force_reports")
+}
+
+model InvestigationReport {
+  id              String    @id @default(uuid())
+  reportNumber    String    @unique @map("report_number") @db.VarChar(32)
+  officerId       String    @map("officer_id")
+  title           String    @db.VarChar(255)
+  description     String    @db.Text
+  status          InvestigationStatus @default(OPEN)
+  priority        Int       @default(3)
+  startDate       DateTime  @map("start_date")
+  endDate         DateTime? @map("end_date")
+  approvedBy      String?   @map("approved_by") @db.VarChar(128)
+  approvedAt      DateTime? @map("approved_at")
+  signatureData   String?   @map("signature_data") @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  officer         Officer   @relation(fields: [officerId], references: [id])
+  evidenceItems   Evidence[]
+
+  @@map("investigation_reports")
+}
+
+enum ReportStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  ARCHIVED
+}
+
+enum InvestigationStatus {
+  OPEN
+  IN_PROGRESS
+  CLOSED
+  COLD_CASE
+}
+
+// ============================================================
+// BOLO SYSTEM
+// ============================================================
+
+model Bolo {
+  id              String    @id @default(uuid())
+  type            BoloType
+  priority        BoloPriority @default(MEDIUM)
+  description     String    @db.Text
+  lastKnownLocation String? @map("last_known_location") @db.VarChar(255)
+  creatorId       String    @map("creator_id")
+  targetCivId     String?   @map("target_civ_id")
+  targetVehicleId String?   @map("target_vehicle_id")
+  expiresAt       DateTime? @map("expires_at")
+  active          Boolean   @default(true)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  creator         Officer   @relation("BoloCreator", fields: [creatorId], references: [id])
+  targetCiv       Civilian? @relation("BoloTarget", fields: [targetCivId], references: [id])
+  targetVehicle   Vehicle?  @relation("BoloVehicle", fields: [targetVehicleId], references: [id])
+
+  @@map("bolos")
+}
+
+enum BoloType {
+  PERSON
+  VEHICLE
+  OFFICER_SAFETY
+}
+
+enum BoloPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// ============================================================
+// EVIDENCE
+// ============================================================
+
+model Evidence {
+  id                    String    @id @default(uuid())
+  evidenceNumber        String    @unique @map("evidence_number") @db.VarChar(32)
+  type                  EvidenceType
+  title                 String    @db.VarChar(255)
+  description           String?   @db.Text
+  fileUrl               String?   @map("file_url") @db.VarChar(512)
+  fileName              String?   @map("file_name") @db.VarChar(255)
+  fileSize              Int?      @map("file_size")
+  officerId             String    @map("officer_id")
+  caseType              String?   @map("case_type") @db.VarChar(32)
+  caseId                String?   @map("case_id")
+  arrestReportId        String?   @map("arrest_report_id")
+  incidentReportId      String?   @map("incident_report_id")
+  crashReportId         String?   @map("crash_report_id")
+  investigationReportId String?   @map("investigation_report_id")
+  createdAt             DateTime  @default(now()) @map("created_at")
+
+  officer               Officer                @relation(fields: [officerId], references: [id])
+  arrestReport          ArrestReport?          @relation(fields: [arrestReportId], references: [id], map: "evidence_arrest_report_fkey")
+  incidentReport        IncidentReport?        @relation(fields: [incidentReportId], references: [id], map: "evidence_incident_report_fkey")
+  crashReport           CrashReport?           @relation(fields: [crashReportId], references: [id], map: "evidence_crash_report_fkey")
+  investigationReport   InvestigationReport?   @relation(fields: [investigationReportId], references: [id], map: "evidence_investigation_report_fkey")
+
+  @@map("evidence")
+}
+
+enum EvidenceType {
+  IMAGE
+  VIDEO
+  DOCUMENT
+  NOTE
+  OTHER
+}
+
+// ============================================================
+// NOTIFICATIONS
+// ============================================================
+
+model Notification {
+  id          String    @id @default(uuid())
+  type        NotificationType
+  title       String    @db.VarChar(255)
+  message     String    @db.Text
+  priority    NotificationPriority @default(NORMAL)
+  targetUserId String?  @map("target_user_id")
+  targetDeptId String?  @map("target_dept_id")
+  read        Boolean   @default(false)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([targetUserId])
+  @@index([read])
+  @@map("notifications")
+}
+
+enum NotificationType {
+  NEW_CALL
+  UNIT_REQUEST
+  BOLO_ALERT
+  WARRANT_ALERT
+  SUPERVISOR_MESSAGE
+  SYSTEM
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+// ============================================================
+// AUDIT LOG
+// ============================================================
+
+model AuditLog {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  action      String    @db.VarChar(64)
+  resource    String    @db.VarChar(64)
+  resourceId  String?   @map("resource_id") @db.VarChar(64)
+  details     String?   @db.Text // JSON details
+  ipAddress   String?   @map("ip_address") @db.VarChar(45)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user        User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([action])
+  @@index([resource])
+  @@map("audit_logs")
+}
+
+// ============================================================
+// SERVER ANNOUNCEMENTS
+// ============================================================
+
+model Announcement {
+  id          String    @id @default(uuid())
+  title       String    @db.VarChar(255)
+  content     String    @db.Text
+  priority    AnnouncementPriority @default(NORMAL)
+  active      Boolean   @default(true)
+  createdBy   String    @map("created_by") @db.VarChar(128)
+  expiresAt   DateTime? @map("expires_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@map("announcements")
+}
+
+enum AnnouncementPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
