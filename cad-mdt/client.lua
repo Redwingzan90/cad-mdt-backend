@@ -740,6 +740,53 @@ function GetOfficerCallsign()
 end
 
 -- ============================================================
+-- ID Card System
+-- ============================================================
+local isIDCardOpen = false
+
+local function ShowIDCard()
+    if isIDCardOpen then return end
+    isIDCardOpen = true
+
+    -- Fetch character info from server/API
+    TriggerServerEvent('cad:character:info')
+end
+
+local function HideIDCard()
+    if not isIDCardOpen then return end
+    isIDCardOpen = false
+    SendNUIMessage({ action = 'hideIDCard' })
+end
+
+RegisterNetEvent('cad:character:infoResult')
+AddEventHandler('cad:character:infoResult', function(result)
+    if not isIDCardOpen then return end
+
+    if result and result.found and result.character then
+        local char = result.character
+        SendNUIMessage({
+            action = 'showIDCard',
+            character = char,
+        })
+    else
+        TriggerEvent('cad:notify', 'No active character found. Register at City Hall first.', 'error')
+        isIDCardOpen = false
+    end
+end)
+
+if Config.IDCard and Config.IDCard.Enabled then
+    RegisterCommand('idcard_toggle', function()
+        if isIDCardOpen then
+            HideIDCard()
+        else
+            ShowIDCard()
+        end
+    end, false)
+
+    RegisterKeyMapping('idcard_toggle', 'Show ID Card', 'keyboard', Config.IDCard.Keybind)
+end
+
+-- ============================================================
 -- Keybind
 -- ============================================================
 RegisterCommand('cad_toggle', function()

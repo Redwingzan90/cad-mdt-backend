@@ -607,6 +607,29 @@ AddEventHandler('cad:insurance:apply', function(data)
 end)
 
 -- ============================================================
+-- Character Info (ID Card)
+-- ============================================================
+RegisterNetEvent('cad:character:info')
+AddEventHandler('cad:character:info', function()
+    local source = source
+    local identifier = GetPlayerIdentifier(source)
+    if not identifier then
+        TriggerClientEvent('cad:character:infoResult', source, { found = false })
+        return
+    end
+
+    APIRequest('POST', '/character-info', {
+        identifier = identifier,
+    }, function(success, result)
+        if success and result then
+            TriggerClientEvent('cad:character:infoResult', source, result)
+        else
+            TriggerClientEvent('cad:character:infoResult', source, { found = false })
+        end
+    end)
+end)
+
+-- ============================================================
 -- Initialization
 -- ============================================================
 Citizen.CreateThread(function()

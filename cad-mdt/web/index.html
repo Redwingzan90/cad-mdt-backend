@@ -17,5 +17,88 @@
   </head>
   <body>
     <div id="app"></div>
+
+    <!-- ID Card Overlay -->
+    <div id="idcard-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; z-index:99999; background:rgba(0,0,0,0.6); align-items:center; justify-content:center; font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+      <div id="idcard" style="width:420px; background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%); border-radius:16px; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.1);">
+        <!-- Header -->
+        <div style="background:linear-gradient(90deg,#1a5276,#2e86c1); padding:14px 20px; display:flex; align-items:center; gap:12px;">
+          <div style="width:40px; height:40px; background:rgba(255,255,255,0.15); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:20px;">🏛️</div>
+          <div>
+            <div style="color:#fff; font-size:14px; font-weight:700; letter-spacing:1px;">STATE OF SAN ANDREAS</div>
+            <div style="color:rgba(255,255,255,0.7); font-size:11px;">IDENTIFICATION CARD</div>
+          </div>
+        </div>
+
+        <!-- Content -->
+        <div style="padding:20px; display:flex; gap:16px;">
+          <!-- Portrait -->
+          <div style="flex-shrink:0;">
+            <div id="idcard-portrait" style="width:100px; height:120px; background:linear-gradient(135deg,#2c3e50,#34495e); border-radius:10px; border:2px solid rgba(46,134,193,0.5); display:flex; align-items:center; justify-content:center; overflow:hidden;">
+              <div style="font-size:48px;">👤</div>
+            </div>
+            <div style="text-align:center; margin-top:6px; font-size:9px; color:rgba(255,255,255,0.4);">OFFICIAL PHOTO</div>
+          </div>
+
+          <!-- Info -->
+          <div style="flex:1; color:#fff;">
+            <div id="idcard-name" style="font-size:20px; font-weight:700; margin-bottom:8px;">---</div>
+            <div id="idcard-details" style="font-size:12px; line-height:1.8; color:rgba(255,255,255,0.8);"></div>
+          </div>
+        </div>
+
+        <!-- Licenses -->
+        <div id="idcard-licenses" style="padding:0 20px 12px;"></div>
+
+        <!-- Footer -->
+        <div style="background:rgba(0,0,0,0.3); padding:10px 20px; display:flex; justify-content:space-between; align-items:center;">
+          <div style="font-size:9px; color:rgba(255,255,255,0.4);">LOS SANTOS DMV • DIGITAL ID</div>
+          <div style="font-size:9px; color:rgba(255,255,255,0.4);">Press F2 to close</div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // ID Card NUI Message Handler
+      window.addEventListener('message', function(event) {
+        var data = event.data;
+        if (data.action === 'showIDCard') {
+          var overlay = document.getElementById('idcard-overlay');
+          var char = data.character;
+          if (!char) return;
+
+          overlay.style.display = 'flex';
+          overlay.style.alignItems = 'center';
+          overlay.style.justifyContent = 'center';
+
+          // Name
+          document.getElementById('idcard-name').textContent = char.firstName + ' ' + char.lastName;
+
+          // Details
+          var detailsHtml = '';
+          detailsHtml += '<div><strong style="color:#2e86c1;">DOB:</strong> ' + (char.dateOfBirth || 'N/A') + '</div>';
+          detailsHtml += '<div><strong style="color:#2e86c1;">Gender:</strong> ' + (char.gender || 'N/A') + '</div>';
+          detailsHtml += '<div><strong style="color:#2e86c1;">Address:</strong> ' + (char.address || 'N/A') + '</div>';
+          detailsHtml += '<div><strong style="color:#2e86c1;">Phone:</strong> ' + (char.phone || 'N/A') + '</div>';
+          document.getElementById('idcard-details').innerHTML = detailsHtml;
+
+          // Licenses
+          var licHtml = '';
+          if (char.licenses && char.licenses.length > 0) {
+            licHtml += '<div style="font-size:10px; color:rgba(255,255,255,0.5); margin-bottom:4px; letter-spacing:1px;">LICENSES</div>';
+            licHtml += '<div style="display:flex; flex-wrap:wrap; gap:4px;">';
+            char.licenses.forEach(function(l) {
+              var color = l.status === 'VALID' ? '#27ae60' : (l.status === 'SUSPENDED' || l.status === 'REVOKED') ? '#e74c3c' : '#f39c12';
+              licHtml += '<span style="font-size:10px; background:rgba(255,255,255,0.1); border-left:3px solid ' + color + '; padding:3px 8px; border-radius:4px; color:rgba(255,255,255,0.8);">' + l.type.toUpperCase() + ' - ' + l.number + '</span>';
+            });
+            licHtml += '</div>';
+          }
+          document.getElementById('idcard-licenses').innerHTML = licHtml;
+
+        } else if (data.action === 'hideIDCard') {
+          document.getElementById('idcard-overlay').style.display = 'none';
+        }
+      });
+    </script>
   </body>
 </html>

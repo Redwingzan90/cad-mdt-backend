@@ -261,6 +261,17 @@ Config.NPCs = {
 }
 
 -- ============================================================
+-- ID Card Settings
+-- ============================================================
+Config.IDCard = {
+    Enabled = true,
+    Keybind = "f2", -- Key to show/hide ID card
+    ShowDuration = 5000, -- How long the ID card stays on screen (ms), 0 = toggle
+    ShowInVehicle = true,
+    ShowOnFoot = true,
+}
+
+-- ============================================================
 -- Logging
 -- ============================================================
 Config.Logging = {
