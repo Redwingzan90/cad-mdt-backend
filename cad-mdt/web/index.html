@@ -1037,7 +1037,8 @@
           updateDutyUI(true, d.officerData);
         }
         // Request initial data
-        fetch('./activeCalls.json').catch(function(){});
+        fetch('https://cad-mdt/getActiveCalls', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({}) });
+        fetch('https://cad-mdt/getUnits', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({}) });
       }
 
       else if (d.action === 'close') {

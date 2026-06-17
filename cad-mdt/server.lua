@@ -70,8 +70,11 @@ end)
 -- Duty Toggle
 -- ============================================================
 RegisterNetEvent('cad:duty:toggle')
-AddEventHandler('cad:duty:toggle', function(identifier, callsign, department)
+AddEventHandler('cad:duty:toggle', function(_, callsign, department)
     local src = source
+    local xPlayer = ESX.GetPlayerFromId(src)
+    if not xPlayer then return end
+    local identifier = xPlayer.identifier
 
     MySQL.query(('SELECT * FROM %s WHERE identifier = ?'):format(Tbl('officers')), { identifier }, function(rows)
         if not rows or #rows == 0 then
@@ -194,6 +197,10 @@ end)
 
 RegisterNetEvent('cad:dispatch:complete')
 AddEventHandler('cad:dispatch:complete', function(callId)
+    local src = source
+    local cache = PlayerDutyCache[src]
+    if not cache or not cache.onDuty then return end
+
     MySQL.update(('UPDATE %s SET status = ?, completed_at = NOW() WHERE id = ?'):format(Tbl('dispatch_calls')),
         { 'COMPLETED', callId })
 
@@ -283,7 +290,7 @@ AddEventHandler('cad:civilian:register', function(data)
     local xPlayer = ESX.GetPlayerFromId(src)
     if not xPlayer then return end
 
-    local identifier = data.identifier or xPlayer.identifier
+    local identifier = xPlayer.identifier
 
     -- Deactivate current active character
     MySQL.update(('UPDATE %s SET is_active = 0 WHERE identifier = ? AND is_active = 1'):format(Tbl('civilians')), { identifier })
@@ -338,7 +345,9 @@ end)
 RegisterNetEvent('cad:dmv:register')
 AddEventHandler('cad:dmv:register', function(data)
     local src = source
-    local identifier = data.identifier
+    local xPlayer = ESX.GetPlayerFromId(src)
+    if not xPlayer then return end
+    local identifier = xPlayer.identifier
 
     -- Find active civilian
     MySQL.query(('SELECT * FROM %s WHERE identifier = ? AND is_active = 1 AND active = 1 LIMIT 1'):format(Tbl('civilians')),
@@ -376,7 +385,9 @@ end)
 RegisterNetEvent('cad:gunlicense:apply')
 AddEventHandler('cad:gunlicense:apply', function(data)
     local src = source
-    local identifier = data.identifier
+    local xPlayer = ESX.GetPlayerFromId(src)
+    if not xPlayer then return end
+    local identifier = xPlayer.identifier
 
     MySQL.query(('SELECT * FROM %s WHERE identifier = ? AND is_active = 1 LIMIT 1'):format(Tbl('civilians')),
         { identifier },
@@ -424,7 +435,9 @@ end)
 RegisterNetEvent('cad:insurance:apply')
 AddEventHandler('cad:insurance:apply', function(data)
     local src = source
-    local identifier = data.identifier
+    local xPlayer = ESX.GetPlayerFromId(src)
+    if not xPlayer then return end
+    local identifier = xPlayer.identifier
 
     MySQL.query(('SELECT * FROM %s WHERE identifier = ? AND is_active = 1 LIMIT 1'):format(Tbl('civilians')),
         { identifier },
