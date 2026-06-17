@@ -1,48 +1,35 @@
--- Police CAD/MDT System - FiveM Resource
--- fxmanifest.lua
+-- ============================================================
+-- CAD-MDT Standalone - FiveM Resource Manifest
+-- ESX Legacy + oxmysql
+-- ============================================================
 
 fx_version 'cerulean'
 game 'gta5'
 
 name 'cad-mdt'
-description 'Police CAD/MDT System'
+description 'Standalone Police CAD/MDT System - ESX Legacy'
 author 'CAD System'
-version '1.0.0'
+version '2.0.0'
 
--- Shared config
+-- Shared
 shared_scripts {
     'config.lua',
 }
 
--- Client-side scripts
+-- Server
+server_scripts {
+    '@oxmysql/lib/MySQL.lua',
+    'server.lua',
+}
+
+-- Client
 client_scripts {
     'client.lua',
 }
 
--- Server-side scripts
-server_scripts {
-    'server.lua',
-}
-
--- NUI page (the Vue web UI)
+-- NUI
 ui_page 'web/index.html'
 
--- Include NUI files
 files {
     'web/index.html',
-    'web/assets/**/*',
-}
-
--- Exports
-exports {
-    'GetOfficerStatus',
-    'IsOfficerOnDuty',
-    'GetOfficerCallsign',
-}
-
-server_exports {
-    'GetOfficerInfo',
-    'GetActiveCalls',
-    'SubmitEmergencyCall',
-    'RunPlateCheck',
 }

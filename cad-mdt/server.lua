@@ -1,174 +1,115 @@
--- Police CAD/MDT System - Server Script
--- server.lua
+-- ============================================================
+-- CAD-MDT Standalone - Server Script
+-- ESX Legacy + oxmysql
+-- ============================================================
 
-local framework = nil
-local playerDutyCache = {} -- Cache duty status per player
+local ESX = nil
+local PlayerDutyCache = {} -- source -> { onDuty, callsign, department, identifier, officerId }
 
 -- ============================================================
--- Framework Detection
+-- ESX Init
 -- ============================================================
-local function DetectFramework()
-    if Config.Framework ~= 'auto' then
-        framework = Config.Framework
-        return
-    end
+TriggerEvent('esx:getSharedObject', function(obj) ESX = obj end)
 
-    if GetResourceState('qb-core') == 'started' then
-        framework = 'qbcore'
-    elseif GetResourceState('es_extended') == 'started' then
-        framework = 'esx'
-    elseif GetResourceState('qbx_core') == 'started' then
-        framework = 'qbox'
-    else
-        framework = 'standalone'
-    end
-
-    print('[CAD] Server detected framework: ' .. framework)
+-- ============================================================
+-- Helpers
+-- ============================================================
+local function Tbl(name)
+    return Config.TablePrefix .. name
 end
 
--- ============================================================
--- HTTP Helper
--- ============================================================
-local function APIRequest(method, endpoint, data, cb)
-    local url = Config.API.URL .. '/api/fivem' .. endpoint
-
-    PerformHttpRequest(url, function(statusCode, responseText, headers)
-        local success = statusCode >= 200 and statusCode < 300
-        local result = nil
-
-        if responseText and #responseText > 0 then
-            local ok, decoded = pcall(json.decode, responseText)
-            if ok then
-                result = decoded
-            end
-        end
-
-        if Config.Logging.Enabled and not success then
-            print('[CAD] API Error: ' .. method .. ' ' .. endpoint .. ' - Status: ' .. tostring(statusCode))
-            if responseText then
-                print('[CAD] Response: ' .. string.sub(responseText, 1, 500))
-            end
-        end
-
-        if cb then
-            cb(success, result, statusCode)
-        end
-    end, method, data and json.encode(data) or '', {
-        ['Content-Type'] = 'application/json',
-        ['X-Server-Key'] = Config.API.ServerKey,
-    })
-end
-
--- ============================================================
--- Framework Getters
--- ============================================================
-local function GetPlayerIdentifier(source)
-    if framework == 'qbcore' then
-        local QBCore = exports['qb-core']:GetCoreObject()
-        local player = QBCore.Functions.GetPlayer(source)
-        return player and player.PlayerData.citizenid or nil
-    elseif framework == 'esx' then
-        local ESX = exports['es_extended']:getSharedObject()
-        local player = ESX.GetPlayerFromId(source)
-        return player and player.identifier or nil
-    elseif framework == 'qbox' then
-        local player = exports.qbx_core:GetPlayer(source)
-        return player and player.PlayerData.citizenid or nil
-    end
-    return tostring(source)
-end
-
-local function IsPlayerPolice(source)
-    if framework == 'qbcore' then
-        local QBCore = exports['qb-core']:GetCoreObject()
-        local player = QBCore.Functions.GetPlayer(source)
-        if player then
-            local job = player.PlayerData.job and player.PlayerData.job.name or 'unemployed'
-            return IsPoliceJob(job)
-        end
-    elseif framework == 'esx' then
-        local ESX = exports['es_extended']:getSharedObject()
-        local player = ESX.GetPlayerFromId(source)
-        if player then
-            local job = player.job and player.job.name or 'unemployed'
-            return IsPoliceJob(job)
-        end
-    elseif framework == 'qbox' then
-        local player = exports.qbx_core:GetPlayer(source)
-        if player then
-            local job = player.PlayerData.job and player.PlayerData.job.name or 'unemployed'
-            return IsPoliceJob(job)
-        end
-    end
-    return false
+local function GenNumber(prefix)
+    return prefix .. '-' .. tostring(os.time()):sub(-6) .. math.random(10,99)
 end
 
 local function IsPoliceJob(jobName)
-    local policeJobs = {
-        'police', 'lspd', 'bcso', 'sahp', 'sheriff',
-        'trooper', 'officer', 'sergeant', 'lieutenant',
-        'captain', 'chief', 'commander',
-    }
-    for _, j in ipairs(policeJobs) do
-        if string.lower(jobName) == j then
-            return true
-        end
+    for _, j in ipairs(Config.PoliceJobs) do
+        if string.lower(jobName) == string.lower(j) then return true end
     end
     return false
 end
 
+local function NotifyClient(source, msg, type)
+    TriggerClientEvent('cad:notify', source, msg, type or 'primary')
+end
+
 -- ============================================================
--- Duty Events
+-- Officer Registration / On-Duty
 -- ============================================================
-RegisterNetEvent('cad:duty:on')
-AddEventHandler('cad:duty:on', function(identifier, callsign, departmentCode)
-    local source = source
+RegisterNetEvent('cad:officer:register')
+AddEventHandler('cad:officer:register', function(data)
+    local src = source
+    local xPlayer = ESX.GetPlayerFromId(src)
+    if not xPlayer then return end
 
-    APIRequest('POST', '/player-duty', {
-        identifier = identifier,
-        onDuty = true,
-        callsign = callsign,
-        departmentCode = departmentCode,
-    }, function(success, result)
-        if success and result and result.success then
-            playerDutyCache[source] = {
-                onDuty = true,
-                callsign = callsign,
-                department = departmentCode,
-                identifier = identifier,
-            }
+    local identifier = xPlayer.identifier
+    local firstname = data.firstname or 'Unknown'
+    local lastname = data.lastname or 'Unknown'
+    local badgeNumber = data.badgeNumber or '0000'
+    local department = data.department or 'LSPD'
+    local rank = data.rank or 'Officer'
 
-            TriggerClientEvent('cad:duty:statusChanged', source, {
-                onDuty = true,
-                officer = result.officer or {},
-            })
-
-            if Config.Logging.Enabled then
-                print('[CAD] Player ' .. source .. ' went on duty as ' .. callsign)
-            end
-        else
-            TriggerClientEvent('QBCore:Notify', source, 'Failed to go on duty. Are you registered as an officer?', 'error')
+    MySQL.insert(('INSERT INTO %s (identifier, firstname, lastname, badge_number, department, rank) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE firstname=?, lastname=?, badge_number=?, department=?, rank=?'):format(Tbl('officers')),
+        { identifier, firstname, lastname, badgeNumber, department, rank, firstname, lastname, badgeNumber, department, rank },
+        function(id)
+            TriggerClientEvent('cad:officer:registered', src, { id = id, identifier = identifier })
         end
-    end)
+    )
 end)
 
-RegisterNetEvent('cad:duty:off')
-AddEventHandler('cad:duty:off', function(identifier)
-    local source = source
+RegisterNetEvent('cad:officer:setCallsign')
+AddEventHandler('cad:officer:setCallsign', function(callsign)
+    local src = source
+    local xPlayer = ESX.GetPlayerFromId(src)
+    if not xPlayer then return end
 
-    APIRequest('POST', '/player-duty', {
-        identifier = identifier,
-        onDuty = false,
-    }, function(success, result)
-        playerDutyCache[source] = nil
+    MySQL.update(('UPDATE %s SET callsign = ? WHERE identifier = ?'):format(Tbl('officers')), { callsign, xPlayer.identifier })
+end)
 
-        TriggerClientEvent('cad:duty:statusChanged', source, {
-            onDuty = false,
-            officer = nil,
-        })
+-- ============================================================
+-- Duty Toggle
+-- ============================================================
+RegisterNetEvent('cad:duty:toggle')
+AddEventHandler('cad:duty:toggle', function(identifier, callsign, department)
+    local src = source
 
-        if Config.Logging.Enabled then
-            print('[CAD] Player ' .. source .. ' went off duty')
+    MySQL.query(('SELECT * FROM %s WHERE identifier = ?'):format(Tbl('officers')), { identifier }, function(rows)
+        if not rows or #rows == 0 then
+            NotifyClient(src, 'No officer profile found. Register at City Hall first.', 'error')
+            return
+        end
+
+        local officer = rows[1]
+        local currentlyOnDuty = officer.on_duty == 1
+
+        if currentlyOnDuty then
+            -- Go OFF duty
+            MySQL.update(('UPDATE %s SET on_duty = 0, status = ?, callsign = NULL WHERE identifier = ?'):format(Tbl('officers')),
+                { 'OFF_DUTY', identifier })
+            PlayerDutyCache[src] = nil
+            TriggerClientEvent('cad:duty:statusChanged', src, { onDuty = false })
+            NotifyClient(src, 'You are now OFF DUTY.', 'primary')
+        else
+            -- Go ON duty
+            local newCallsign = callsign or officer.callsign or '1-ALPHA'
+            local newDept = department or officer.department
+
+            MySQL.update(('UPDATE %s SET on_duty = 1, status = ?, callsign = ?, department = ? WHERE identifier = ?'):format(Tbl('officers')),
+                { 'AVAILABLE', newCallsign, newDept, identifier })
+
+            PlayerDutyCache[src] = {
+                onDuty = true,
+                callsign = newCallsign,
+                department = newDept,
+                identifier = identifier,
+                officerId = officer.id,
+            }
+
+            TriggerClientEvent('cad:duty:statusChanged', src, {
+                onDuty = true,
+                officer = { id = officer.id, callsign = newCallsign, department = newDept, firstname = officer.firstname, lastname = officer.lastname },
+            })
+            NotifyClient(src, 'You are now ON DUTY as ' .. newCallsign, 'success')
         end
     end)
 end)
@@ -178,21 +119,16 @@ end)
 -- ============================================================
 RegisterNetEvent('cad:location:update')
 AddEventHandler('cad:location:update', function(lat, lng)
-    local source = source
-    local cache = playerDutyCache[source]
-
+    local src = source
+    local cache = PlayerDutyCache[src]
     if not cache or not cache.onDuty then return end
 
-    -- Debounce: only update every few seconds
     local now = os.time()
     if cache.lastLocUpdate and (now - cache.lastLocUpdate) < 3 then return end
     cache.lastLocUpdate = now
 
-    APIRequest('POST', '/location', {
-        officerId = cache.officerId,
-        lat = lat,
-        lng = lng,
-    })
+    MySQL.update(('UPDATE %s SET last_lat = ?, last_lng = ?, last_update = NOW() WHERE identifier = ?'):format(Tbl('officers')),
+        { lat, lng, cache.identifier })
 end)
 
 -- ============================================================
@@ -200,41 +136,90 @@ end)
 -- ============================================================
 RegisterNetEvent('cad:status:update')
 AddEventHandler('cad:status:update', function(status, detail)
-    local source = source
-    local cache = playerDutyCache[source]
-
+    local src = source
+    local cache = PlayerDutyCache[src]
     if not cache or not cache.onDuty then return end
 
-    -- Update via API
-    APIRequest('POST', '/status', {
-        officerId = cache.officerId,
-        status = status,
-        detail = detail,
-    })
+    MySQL.update(('UPDATE %s SET status = ?, status_detail = ? WHERE identifier = ?'):format(Tbl('officers')),
+        { status, detail, cache.identifier })
+
+    TriggerClientEvent('cad:status:updated', src, { status = status, detail = detail })
 end)
 
 -- ============================================================
--- Emergency (911) Calls
+-- Dispatch Calls
+-- ============================================================
+RegisterNetEvent('cad:dispatch:create')
+AddEventHandler('cad:dispatch:create', function(data)
+    local src = source
+    local xPlayer = ESX.GetPlayerFromId(src)
+    if not xPlayer then return end
+
+    local callNumber = GenNumber('CAD')
+    local callType = data.type or 'UNKNOWN'
+    local description = data.description or ''
+    local location = data.location or 'Unknown'
+    local lat = data.lat
+    local lng = data.lng
+    local priority = data.priority or 'PRIORITY_3'
+
+    MySQL.insert(('INSERT INTO %s (call_number, type, description, location, lat, lng, priority, creator_identifier) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'):format(Tbl('dispatch_calls')),
+        { callNumber, callType, description, location, lat, lng, priority, xPlayer.identifier },
+        function(id)
+            local call = { id = id, call_number = callNumber, type = callType, description = description, location = location, lat = lat, lng = lng, priority = priority, status = 'PENDING', creator_identifier = xPlayer.identifier }
+
+            -- Notify all on-duty officers
+            for plySrc, cache in pairs(PlayerDutyCache) do
+                if cache.onDuty then
+                    TriggerClientEvent('cad:dispatch:newCall', plySrc, call)
+                end
+            end
+
+            TriggerClientEvent('cad:dispatch:created', src, call)
+        end
+    )
+end)
+
+RegisterNetEvent('cad:dispatch:respond')
+AddEventHandler('cad:dispatch:respond', function(callId)
+    local src = source
+    local cache = PlayerDutyCache[src]
+    if not cache or not cache.onDuty then return end
+
+    MySQL.update(('UPDATE %s SET status = ?, handler_identifier = ? WHERE id = ?'):format(Tbl('dispatch_calls')),
+        { 'ASSIGNED', cache.identifier, callId })
+
+    TriggerClientEvent('cad:dispatch:callUpdate', src, { id = callId, status = 'ASSIGNED' })
+end)
+
+RegisterNetEvent('cad:dispatch:complete')
+AddEventHandler('cad:dispatch:complete', function(callId)
+    MySQL.update(('UPDATE %s SET status = ?, completed_at = NOW() WHERE id = ?'):format(Tbl('dispatch_calls')),
+        { 'COMPLETED', callId })
+
+    TriggerClientEvent('cad:dispatch:callUpdate', -1, { id = callId, status = 'COMPLETED' })
+end)
+
+-- ============================================================
+-- 911 Calls
 -- ============================================================
 RegisterNetEvent('cad:emergency:call')
 AddEventHandler('cad:emergency:call', function(data)
-    local source = source
+    local src = source
 
-    APIRequest('POST', '/911', {
-        callerName = data.callerName or 'Unknown',
-        callerPhone = data.callerPhone,
-        description = data.description,
-        location = data.location or 'Unknown',
-        lat = data.lat,
-        lng = data.lng,
-        type = data.type or 'Emergency',
-    }, function(success, result)
-        if success then
-            TriggerClientEvent('QBCore:Notify', source, 'Your 911 call has been received.', 'success')
-        else
-            TriggerClientEvent('QBCore:Notify', source, 'Failed to submit 911 call.', 'error')
+    MySQL.insert(('INSERT INTO %s (caller_name, caller_phone, description, location, lat, lng, type, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'):format(Tbl('emergency_calls')),
+        { data.callerName or 'Unknown', data.callerPhone, data.description, data.location or 'Unknown', data.lat, data.lng, data.type or 'Emergency', 'PENDING' },
+        function(id)
+            NotifyClient(src, 'Your 911 call has been received. Help is on the way.', 'success')
+
+            -- Notify on-duty officers
+            for plySrc, cache in pairs(PlayerDutyCache) do
+                if cache.onDuty then
+                    TriggerClientEvent('cad:dispatch:newCall', plySrc, { id = id, type = '911', description = data.description, location = data.location, priority = 'PRIORITY_1' })
+                end
+            end
         end
-    end)
+    )
 end)
 
 -- ============================================================
@@ -242,397 +227,467 @@ end)
 -- ============================================================
 RegisterNetEvent('cad:plate:check')
 AddEventHandler('cad:plate:check', function(plate)
-    local source = source
-
-    if not IsPlayerPolice(source) and not playerDutyCache[source] then
-        TriggerClientEvent('QBCore:Notify', source, 'Access denied.', 'error')
+    local src = source
+    local cache = PlayerDutyCache[src]
+    if not cache or not cache.onDuty then
+        NotifyClient(src, 'You must be on duty to run plates.', 'error')
         return
     end
 
-    APIRequest('POST', '/plate-check', {
-        plate = plate,
-    }, function(success, result)
-        if success and result then
-            TriggerClientEvent('cad:plate:result', source, result)
-        else
-            TriggerClientEvent('cad:plate:result', source, {
-                found = false,
-                plate = plate,
-                message = 'Error checking plate.',
-            })
+    MySQL.query(('SELECT v.*, c.firstname, c.lastname, c.date_of_birth FROM %s v LEFT JOIN %s c ON v.owner_id = c.id WHERE v.plate = ?'):format(Tbl('vehicles'), Tbl('civilians')),
+        { string.upper(plate) },
+        function(rows)
+            if not rows or #rows == 0 then
+                TriggerClientEvent('cad:plate:result', src, { found = false, plate = plate, message = 'Vehicle not registered.' })
+                return
+            end
+
+            local v = rows[1]
+            local flags = {}
+            if v.stolen == 1 then table.insert(flags, 'STOLEN') end
+            if v.registration_status ~= 'VALID' then table.insert(flags, 'REG ' .. v.registration_status) end
+
+            -- Check for warrants on owner
+            MySQL.query(('SELECT * FROM %s WHERE civilian_id = ? AND status = ?'):format(Tbl('warrants')),
+                { v.owner_id, 'ACTIVE' },
+                function(warrants)
+                    if warrants and #warrants > 0 then
+                        table.insert(flags, 'OWNER HAS WARRANTS')
+                    end
+
+                    TriggerClientEvent('cad:plate:result', src, {
+                        found = true,
+                        plate = v.plate,
+                        model = v.model,
+                        color = v.color,
+                        year = v.year,
+                        owner = (v.firstname or 'Unknown') .. ' ' .. (v.lastname or ''),
+                        ownerDOB = v.date_of_birth,
+                        registration = v.registration_status,
+                        insurance = v.insurance_status,
+                        stolen = v.stolen == 1,
+                        flags = flags,
+                    })
+                end
+            )
         end
-    end)
+    )
 end)
 
 -- ============================================================
--- API Response Handler
+-- Civilian Registration
 -- ============================================================
-RegisterNetEvent('cad:api:request')
-AddEventHandler('cad:api:request', function(httpMethod, urlPath, data)
-    local source = source
+RegisterNetEvent('cad:civilian:register')
+AddEventHandler('cad:civilian:register', function(data)
+    local src = source
+    local xPlayer = ESX.GetPlayerFromId(src)
+    if not xPlayer then return end
 
-    APIRequest(httpMethod or 'GET', urlPath, data, function(success, result)
-        TriggerClientEvent('cad:api:response', source, urlPath, {
-            success = success,
-            data = result,
-        })
-    end)
+    local identifier = data.identifier or xPlayer.identifier
+
+    -- Deactivate current active character
+    MySQL.update(('UPDATE %s SET is_active = 0 WHERE identifier = ? AND is_active = 1'):format(Tbl('civilians')), { identifier })
+
+    MySQL.insert(('INSERT INTO %s (identifier, firstname, lastname, date_of_birth, gender, address, phone, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 1)'):format(Tbl('civilians')),
+        { identifier, data.firstName, data.lastName, data.dateOfBirth, data.gender, data.address, data.phone },
+        function(civId)
+            -- Auto-issue driver's license
+            local licNum = 'DL' .. tostring(os.time()):sub(-8) .. math.random(10,99)
+            MySQL.insert(('INSERT INTO %s (civilian_id, type, number, status, issued_at, expires_at) VALUES (?, ?, ?, ?, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR))'):format(Tbl('licenses')),
+                { civId, 'drivers', licNum, 'VALID' })
+
+            NotifyClient(src, 'Civilian ID registered! License: ' .. licNum, 'success')
+        end
+    )
 end)
 
 -- ============================================================
--- Player Disconnect Cleanup
+-- Characters List
 -- ============================================================
-AddEventHandler('playerDropped', function(reason)
-    local source = source
-    local cache = playerDutyCache[source]
+RegisterNetEvent('cad:characters:list')
+AddEventHandler('cad:characters:list', function(data)
+    local src = source
+    local identifier = data.identifier
 
-    if cache and cache.onDuty and Config.Duty.AutoGoOffDutyOnDisconnect then
-        APIRequest('POST', '/player-duty', {
-            identifier = cache.identifier,
-            onDuty = false,
-        })
+    MySQL.query(('SELECT c.*, GROUP_CONCAT(DISTINCT l.type SEPARATOR \",\") as license_types FROM %s c LEFT JOIN %s l ON c.id = l.civilian_id WHERE c.identifier = ? AND c.active = 1 GROUP BY c.id'):format(Tbl('civilians'), Tbl('licenses')),
+        { identifier },
+        function(rows)
+            TriggerClientEvent('cad:characters:result', src, rows or {})
+        end
+    )
+end)
+
+-- ============================================================
+-- Character Selection
+-- ============================================================
+RegisterNetEvent('cad:character:select')
+AddEventHandler('cad:character:select', function(data)
+    local src = source
+    local identifier = data.identifier
+    local civilianId = data.civilianId
+
+    MySQL.update(('UPDATE %s SET is_active = 0 WHERE identifier = ?'):format(Tbl('civilians')), { identifier })
+    MySQL.update(('UPDATE %s SET is_active = 1 WHERE id = ? AND identifier = ?'):format(Tbl('civilians')), { civilianId, identifier })
+
+    NotifyClient(src, 'Character switched!', 'success')
+end)
+
+-- ============================================================
+-- DMV Vehicle Registration
+-- ============================================================
+RegisterNetEvent('cad:dmv:register')
+AddEventHandler('cad:dmv:register', function(data)
+    local src = source
+    local identifier = data.identifier
+
+    -- Find active civilian
+    MySQL.query(('SELECT * FROM %s WHERE identifier = ? AND is_active = 1 AND active = 1 LIMIT 1'):format(Tbl('civilians')),
+        { identifier },
+        function(rows)
+            if not rows or #rows == 0 then
+                NotifyClient(src, 'Register as a civilian first at City Hall.', 'error')
+                return
+            end
+
+            local civ = rows[1]
+            local plate = string.upper(string.sub(data.plate or '', 1, 8))
+
+            -- Check duplicate
+            MySQL.query(('SELECT id FROM %s WHERE plate = ?'):format(Tbl('vehicles')), { plate }, function(existing)
+                if existing and #existing > 0 then
+                    NotifyClient(src, 'This plate is already registered.', 'error')
+                    return
+                end
+
+                MySQL.insert(('INSERT INTO %s (plate, model, color, year, owner_id, registration_status, insurance_status) VALUES (?, ?, ?, ?, ?, ?, ?)'):format(Tbl('vehicles')),
+                    { plate, data.model or 'Unknown', data.color or 'Unknown', data.year, civ.id, 'VALID', 'NONE' },
+                    function()
+                        NotifyClient(src, 'Vehicle registered! Plate: ' .. plate, 'success')
+                    end
+                )
+            end)
+        end
+    )
+end)
+
+-- ============================================================
+-- Gun License
+-- ============================================================
+RegisterNetEvent('cad:gunlicense:apply')
+AddEventHandler('cad:gunlicense:apply', function(data)
+    local src = source
+    local identifier = data.identifier
+
+    MySQL.query(('SELECT * FROM %s WHERE identifier = ? AND is_active = 1 LIMIT 1'):format(Tbl('civilians')),
+        { identifier },
+        function(rows)
+            if not rows or #rows == 0 then
+                NotifyClient(src, 'Register as a civilian first.', 'error')
+                return
+            end
+
+            local civ = rows[1]
+
+            -- Check for existing gun license
+            MySQL.query(('SELECT * FROM %s WHERE civilian_id = ? AND type = ? AND status = ?'):format(Tbl('licenses')),
+                { civ.id, 'weapon', 'VALID' },
+                function(existing)
+                    if existing and #existing > 0 then
+                        NotifyClient(src, 'You already have a valid gun license.', 'error')
+                        return
+                    end
+
+                    -- Check driver's license prerequisite
+                    MySQL.query(('SELECT * FROM %s WHERE civilian_id = ? AND type = ? AND status = ?'):format(Tbl('licenses')),
+                        { civ.id, 'drivers', 'VALID' },
+                        function(dl)
+                            if not dl or #dl == 0 then
+                                NotifyClient(src, 'You need a valid driver\'s license first.', 'error')
+                                return
+                            end
+
+                            local licNum = 'GL' .. tostring(os.time()):sub(-8) .. math.random(10,99)
+                            MySQL.insert(('INSERT INTO %s (civilian_id, type, number, status, issued_at, expires_at) VALUES (?, ?, ?, ?, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR))'):format(Tbl('licenses')),
+                                { civ.id, 'weapon', licNum, 'VALID' })
+                            NotifyClient(src, 'Gun license issued! License: ' .. licNum, 'success')
+                        end
+                    )
+                end
+            )
+        end
+    )
+end)
+
+-- ============================================================
+-- Insurance
+-- ============================================================
+RegisterNetEvent('cad:insurance:apply')
+AddEventHandler('cad:insurance:apply', function(data)
+    local src = source
+    local identifier = data.identifier
+
+    MySQL.query(('SELECT * FROM %s WHERE identifier = ? AND is_active = 1 LIMIT 1'):format(Tbl('civilians')),
+        { identifier },
+        function(rows)
+            if not rows or #rows == 0 then
+                NotifyClient(src, 'Register as a civilian first.', 'error')
+                return
+            end
+
+            local civ = rows[1]
+            MySQL.query(('SELECT * FROM %s WHERE plate = ? AND owner_id = ?'):format(Tbl('vehicles')),
+                { string.upper(data.plate), civ.id },
+                function(vehicles)
+                    if not vehicles or #vehicles == 0 then
+                        NotifyClient(src, 'Vehicle not found or not registered to you.', 'error')
+                        return
+                    end
+
+                    MySQL.update(('UPDATE %s SET insurance_status = ? WHERE id = ?'):format(Tbl('vehicles')),
+                        { 'VALID', vehicles[1].id })
+                    NotifyClient(src, 'Insurance activated for ' .. vehicles[1].plate, 'success')
+                end
+            )
+        end
+    )
+end)
+
+-- ============================================================
+-- BOLOs
+-- ============================================================
+RegisterNetEvent('cad:bolo:create')
+AddEventHandler('cad:bolo:create', function(data)
+    local src = source
+    local xPlayer = ESX.GetPlayerFromId(src)
+    if not xPlayer then return end
+
+    MySQL.insert(('INSERT INTO %s (type, priority, description, last_known_location, creator_identifier, target_civilian_id, target_vehicle_id, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'):format(Tbl('bolos')),
+        { data.type or 'PERSON', data.priority or 'MEDIUM', data.description, data.location, xPlayer.identifier, data.targetCivilianId, data.targetVehicleId, data.expiresAt },
+        function(id)
+            local bolo = { id = id, type = data.type, priority = data.priority, description = data.description }
+
+            for plySrc, cache in pairs(PlayerDutyCache) do
+                if cache.onDuty then
+                    TriggerClientEvent('cad:bolo:alert', plySrc, bolo)
+                end
+            end
+        end
+    )
+end)
+
+-- ============================================================
+-- Reports
+-- ============================================================
+RegisterNetEvent('cad:report:create')
+AddEventHandler('cad:report:create', function(data)
+    local src = source
+    local xPlayer = ESX.GetPlayerFromId(src)
+    if not xPlayer then return end
+
+    local reportNumber = GenNumber(data.prefix or 'INC')
+    local tblName = Tbl(data.tableName or 'incident_reports')
+
+    MySQL.insert(('INSERT INTO %s (report_number, officer_identifier, location, date_time, type, narrative, status) VALUES (?, ?, ?, ?, ?, ?, ?)'):format(tblName),
+        { reportNumber, xPlayer.identifier, data.location, data.dateTime, data.type, data.narrative, 'DRAFT' },
+        function(id)
+            NotifyClient(src, 'Report created: ' .. reportNumber, 'success')
+        end
+    )
+end)
+
+-- ============================================================
+-- Gunshot Detection
+-- ============================================================
+RegisterNetEvent('cad:gunfire:report')
+AddEventHandler('cad:gunfire:report', function(data)
+    local src = source
+    if not Config.Gunfire.Enabled then return end
+
+    -- Create dispatch call
+    local callNumber = GenNumber('GUN')
+    MySQL.insert(('INSERT INTO %s (call_number, type, description, location, lat, lng, priority, creator_identifier, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'):format(Tbl('dispatch_calls')),
+        { callNumber, 'SHOTS FIRED', 'Gunfire detected at ' .. (data.streetName or 'Unknown'), data.streetName or 'Unknown', data.lat, data.lng, 'PRIORITY_1', 'SYSTEM', 'PENDING' },
+        function()
+            -- Notify on-duty officers
+            for plySrc, cache in pairs(PlayerDutyCache) do
+                if cache.onDuty then
+                    TriggerClientEvent('cad:gunfire:alert', plySrc, { lat = data.lat, lng = data.lng, streetName = data.streetName })
+                end
+            end
+        end
+    )
+end)
+
+-- ============================================================
+-- Officer Info Request (for ID card)
+-- ============================================================
+RegisterNetEvent('cad:character:info')
+AddEventHandler('cad:character:info', function()
+    local src = source
+    local xPlayer = ESX.GetPlayerFromId(src)
+    if not xPlayer then
+        TriggerClientEvent('cad:character:infoResult', src, { found = false })
+        return
     end
 
-    playerDutyCache[source] = nil
+    local identifier = xPlayer.identifier
+
+    -- Get active civilian
+    MySQL.query(('SELECT * FROM %s WHERE identifier = ? AND is_active = 1 AND active = 1 LIMIT 1'):format(Tbl('civilians')),
+        { identifier },
+        function(civRows)
+            if not civRows or #civRows == 0 then
+                TriggerClientEvent('cad:character:infoResult', src, { found = false, message = 'No active character.' })
+                return
+            end
+
+            local civ = civRows[1]
+            local civId = civ.id
+
+            -- Get licenses
+            MySQL.query(('SELECT * FROM %s WHERE civilian_id = ?'):format(Tbl('licenses')), { civId }, function(licenses)
+                -- Get vehicles
+                MySQL.query(('SELECT * FROM %s WHERE owner_id = ?'):format(Tbl('vehicles')), { civId }, function(vehicles)
+                    -- Get warrants
+                    MySQL.query(('SELECT * FROM %s WHERE civilian_id = ? AND status = ?'):format(Tbl('warrants')), { civId, 'ACTIVE' }, function(warrants)
+                        -- Counts
+                        MySQL.scalar(('SELECT COUNT(*) FROM %s WHERE civilian_id = ?'):format(Tbl('citations')), { civId }, function(citationCount)
+                            MySQL.scalar(('SELECT COUNT(*) FROM %s WHERE civilian_id = ?'):format(Tbl('warnings')), { civId }, function(warningCount)
+                                MySQL.scalar(('SELECT COUNT(*) FROM %s WHERE civilian_id = ?'):format(Tbl('arrest_reports')), { civId }, function(arrestCount)
+                                    local dob = civ.date_of_birth
+                                    local dobFormatted = 'Unknown'
+                                    if dob then
+                                        dobFormatted = os.date('%m/%d/%Y', os.time(dob))
+                                    end
+
+                                    TriggerClientEvent('cad:character:infoResult', src, {
+                                        found = true,
+                                        character = {
+                                            firstName = civ.firstname,
+                                            lastName = civ.lastname,
+                                            dateOfBirth = dobFormatted,
+                                            gender = civ.gender or 'Not specified',
+                                            address = civ.address or 'Not on file',
+                                            phone = civ.phone or 'Not on file',
+                                            licenses = licenses or {},
+                                            vehicles = vehicles or {},
+                                            warrants = warrants or {},
+                                            citationCount = citationCount or 0,
+                                            warningCount = warningCount or 0,
+                                            arrestCount = arrestCount or 0,
+                                        },
+                                    })
+                                end)
+                            end)
+                        end)
+                    end)
+                end)
+            end)
+        end
+    )
+end)
+
+-- ============================================================
+-- Get Active Calls (for dashboard)
+-- ============================================================
+RegisterNetEvent('cad:dispatch:getActive')
+AddEventHandler('cad:dispatch:getActive', function()
+    local src = source
+    MySQL.query(('SELECT * FROM %s WHERE status != ? ORDER BY created_at DESC LIMIT 50'):format(Tbl('dispatch_calls')), { 'COMPLETED' }, function(rows)
+        TriggerClientEvent('cad:dispatch:activeList', src, rows or {})
+    end)
+end)
+
+-- ============================================================
+-- Get Units (for dashboard)
+-- ============================================================
+RegisterNetEvent('cad:dispatch:getUnits')
+AddEventHandler('cad:dispatch:getUnits', function()
+    local src = source
+    MySQL.query(('SELECT * FROM %s WHERE on_duty = 1'):format(Tbl('officers')), {}, function(rows)
+        TriggerClientEvent('cad:dispatch:unitList', src, rows or {})
+    end)
+end)
+
+-- ============================================================
+-- Search Civilians
+-- ============================================================
+RegisterNetEvent('cad:search:civilians')
+AddEventHandler('cad:search:civilians', function(query)
+    local src = source
+    local search = '%' .. (query or '') .. '%'
+
+    MySQL.query(('SELECT c.*, GROUP_CONCAT(DISTINCT l.type SEPARATOR \",\") as license_types FROM %s c LEFT JOIN %s l ON c.id = l.civilian_id WHERE c.active = 1 AND (c.firstname LIKE ? OR c.lastname LIKE ? OR c.phone LIKE ?) GROUP BY c.id LIMIT 25'):format(Tbl('civilians'), Tbl('licenses')),
+        { search, search, search },
+        function(rows)
+            TriggerClientEvent('cad:search:results', src, { type = 'civilians', results = rows or {} })
+        end
+    )
+end)
+
+-- ============================================================
+-- Search Vehicles
+-- ============================================================
+RegisterNetEvent('cad:search:vehicles')
+AddEventHandler('cad:search:vehicles', function(query)
+    local src = source
+    local search = '%' .. string.upper(query or '') .. '%'
+
+    MySQL.query(('SELECT v.*, c.firstname, c.lastname FROM %s v LEFT JOIN %s c ON v.owner_id = c.id WHERE v.plate LIKE ? OR v.model LIKE ? OR v.vin LIKE ? LIMIT 25'):format(Tbl('vehicles'), Tbl('civilians')),
+        { search, search, search },
+        function(rows)
+            TriggerClientEvent('cad:search:results', src, { type = 'vehicles', results = rows or {} })
+        end
+    )
+end)
+
+-- ============================================================
+-- Player Disconnect
+-- ============================================================
+AddEventHandler('playerDropped', function()
+    local src = source
+    local cache = PlayerDutyCache[src]
+    if cache and cache.onDuty then
+        MySQL.update(('UPDATE %s SET on_duty = 0, status = ? WHERE identifier = ?'):format(Tbl('officers')),
+            { 'OFF_DUTY', cache.identifier })
+    end
+    PlayerDutyCache[src] = nil
 end)
 
 -- ============================================================
 -- Exports
 -- ============================================================
+exports('GetOfficerInfo', function(source)
+    return PlayerDutyCache[source] or nil
+end)
 
-function GetOfficerInfo(source)
-    return playerDutyCache[source] or nil
-end
-
-function GetActiveCalls(cb)
-    APIRequest('GET', '/active-calls', nil, function(success, result)
-        if cb then cb(success and result or {}) end
+exports('GetActiveCalls', function(cb)
+    MySQL.query(('SELECT * FROM %s WHERE status != ? ORDER BY created_at DESC LIMIT 50'):format(Tbl('dispatch_calls')), { 'COMPLETED' }, function(rows)
+        if cb then cb(rows or {}) end
     end)
-end
+end)
 
-function SubmitEmergencyCall(data, cb)
-    APIRequest('POST', '/911', data, function(success, result)
-        if cb then cb(success, result) end
-    end)
-end
+exports('CreateDispatchCall', function(data, cb)
+    local src = data.source or 0
+    local callNumber = GenNumber('CAD')
 
-function RunPlateCheck(plate, cb)
-    APIRequest('POST', '/plate-check', { plate = plate }, function(success, result)
-        if cb then cb(success, result) end
-    end)
-end
-
--- ============================================================
--- Duty Command Handler
--- ============================================================
-RegisterNetEvent('cad:duty:toggle')
-AddEventHandler('cad:duty:toggle', function(identifier, callsign, departmentCode)
-    local source = source
-    local cache = playerDutyCache[source]
-
-    if cache and cache.onDuty then
-        -- Go off duty
-        APIRequest('POST', '/player-duty', {
-            identifier = identifier,
-            onDuty = false,
-        }, function(success, result)
-            playerDutyCache[source] = nil
-            TriggerClientEvent('cad:duty:statusChanged', source, {
-                onDuty = false,
-                officer = nil,
-            })
-            if Config.Logging.Enabled then
-                print('[CAD] Player ' .. source .. ' went off duty via /duty command')
-            end
-        end)
-    else
-        -- Go on duty
-        APIRequest('POST', '/player-duty', {
-            identifier = identifier,
-            onDuty = true,
-            callsign = callsign,
-            departmentCode = departmentCode,
-        }, function(success, result)
-            if success and result and result.success then
-                playerDutyCache[source] = {
-                    onDuty = true,
-                    callsign = callsign,
-                    department = departmentCode,
-                    identifier = identifier,
-                }
-                TriggerClientEvent('cad:duty:statusChanged', source, {
-                    onDuty = true,
-                    officer = result.officer or {},
-                })
-                if Config.Logging.Enabled then
-                    print('[CAD] Player ' .. source .. ' went on duty via /duty command as ' .. callsign)
+    MySQL.insert(('INSERT INTO %s (call_number, type, description, location, lat, lng, priority, creator_identifier, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'):format(Tbl('dispatch_calls')),
+        { callNumber, data.type, data.description, data.location, data.lat, data.lng, data.priority or 'PRIORITY_3', 'EXPORT', 'PENDING' },
+        function(id)
+            local call = { id = id, call_number = callNumber, type = data.type, description = data.description }
+            for plySrc, cache in pairs(PlayerDutyCache) do
+                if cache.onDuty then
+                    TriggerClientEvent('cad:dispatch:newCall', plySrc, call)
                 end
-            else
-                TriggerClientEvent('cad:notify', source, 'Failed to go on duty. Are you registered as an officer?', 'error')
             end
-        end)
-    end
-end)
-
--- ============================================================
--- Gunfire Detection Handler
--- ============================================================
-RegisterNetEvent('cad:gunfire:report')
-AddEventHandler('cad:gunfire:report', function(data)
-    local source = source
-    if not Config.Gunfire.Enabled then return end
-    if not Config.Gunfire.NotifyDispatch then return end
-
-    local streetName = data.streetName or 'Unknown Location'
-    local weaponHash = data.weapon or 'Unknown'
-
-    local weaponName = weaponHash
-    if type(weaponHash) == 'number' then
-        weaponName = 'Weapon #' .. tostring(weaponHash)
-    end
-
-    -- Create a dispatch call via API
-    APIRequest('POST', '/gunfire', {
-        lat = data.lat,
-        lng = data.lng,
-        streetName = streetName,
-        weapon = weaponName,
-        playerId = source,
-    }, function(success, result)
-        if success then
-            if Config.Logging.Enabled then
-                print('[CAD] Gunfire detected at ' .. streetName .. ' by player ' .. source)
-            end
+            if cb then cb(call) end
         end
-    end)
-
-    -- Also directly notify all on-duty officers via client events
-    -- so they get the blip and notification immediately
-    for playerSource, cache in pairs(playerDutyCache) do
-        if cache and cache.onDuty then
-            TriggerClientEvent('cad:gunfire:alert', playerSource, {
-                lat = data.lat,
-                lng = data.lng,
-                streetName = streetName,
-            })
-        end
-    end
+    )
 end)
 
 -- ============================================================
--- Vehicle Registration (DMV)
+-- Init
 -- ============================================================
-RegisterNetEvent('cad:dmv:register')
-AddEventHandler('cad:dmv:register', function(data)
-    local source = source
-
-    local identifier = data.identifier
-    if not identifier then
-        TriggerClientEvent('cad:notify', source, 'Unable to verify your identity.', 'error')
-        return
-    end
-
-    APIRequest('POST', '/dmv/register', {
-        identifier = identifier,
-        plate = data.plate,
-        model = data.model,
-        color = data.color,
-        year = data.year,
-    }, function(success, result)
-        if success and result then
-            if result.success then
-                TriggerClientEvent('cad:notify', source, 'Vehicle registered! Plate: ' .. (result.plate or data.plate), 'success')
-            else
-                TriggerClientEvent('cad:notify', source, result.message or 'Registration failed.', 'error')
-            end
-        else
-            TriggerClientEvent('cad:notify', source, 'Failed to register vehicle.', 'error')
-        end
-    end)
-end)
-
--- ============================================================
--- Civilian Registration (Multi-Character)
--- ============================================================
-RegisterNetEvent('cad:civilian:register')
-AddEventHandler('cad:civilian:register', function(data)
-    local source = source
-
-    local identifier = data.identifier
-    if not identifier then
-        TriggerClientEvent('cad:notify', source, 'Unable to verify your identity.', 'error')
-        return
-    end
-
-    APIRequest('POST', '/civilian/register', {
-        identifier = identifier,
-        firstName = data.firstName,
-        lastName = data.lastName,
-        dateOfBirth = data.dateOfBirth,
-        gender = data.gender,
-        address = data.address,
-        phone = data.phone,
-    }, function(success, result)
-        if success and result then
-            if result.success then
-                local msg = 'Civilian ID registered successfully!'
-                if result.licenseNumber then
-                    msg = msg .. ' License: ' .. result.licenseNumber
-                end
-                if result.characterNumber then
-                    msg = msg .. ' (Character #' .. result.characterNumber .. ')'
-                end
-                TriggerClientEvent('cad:notify', source, msg, 'success')
-                -- Refresh character list for the player
-                TriggerClientEvent('cad:character:refresh', source)
-            else
-                TriggerClientEvent('cad:notify', source, result.message or 'Registration failed.', 'error')
-            end
-        else
-            TriggerClientEvent('cad:notify', source, 'Failed to register civilian ID.', 'error')
-        end
-    end)
-end)
-
--- ============================================================
--- Character List (Multi-Character)
--- ============================================================
-RegisterNetEvent('cad:characters:list')
-AddEventHandler('cad:characters:list', function(data)
-    local source = source
-
-    local identifier = data.identifier
-    if not identifier then
-        TriggerClientEvent('cad:notify', source, 'Unable to verify your identity.', 'error')
-        return
-    end
-
-    APIRequest('POST', '/characters', {
-        identifier = identifier,
-    }, function(success, result)
-        if success and result and result.success then
-            TriggerClientEvent('cad:characters:result', source, result.characters)
-        else
-            TriggerClientEvent('cad:characters:result', source, {})
-        end
-    end)
-end)
-
--- ============================================================
--- Character Selection (Multi-Character)
--- ============================================================
-RegisterNetEvent('cad:character:select')
-AddEventHandler('cad:character:select', function(data)
-    local source = source
-
-    local identifier = data.identifier
-    local civilianId = data.civilianId
-    if not identifier or not civilianId then
-        TriggerClientEvent('cad:notify', source, 'Invalid character selection.', 'error')
-        return
-    end
-
-    APIRequest('POST', '/character/select', {
-        identifier = identifier,
-        civilianId = civilianId,
-    }, function(success, result)
-        if success and result then
-            if result.success then
-                TriggerClientEvent('cad:notify', source, result.message or 'Character switched!', 'success')
-                TriggerClientEvent('cad:character:selected', source, result.activeCharacter)
-            else
-                TriggerClientEvent('cad:notify', source, result.message or 'Selection failed.', 'error')
-            end
-        else
-            TriggerClientEvent('cad:notify', source, 'Failed to switch character.', 'error')
-        end
-    end)
-end)
-
--- ============================================================
--- Gun License Application
--- ============================================================
-RegisterNetEvent('cad:gunlicense:apply')
-AddEventHandler('cad:gunlicense:apply', function(data)
-    local source = source
-    local identifier = data.identifier
-    if not identifier then
-        TriggerClientEvent('cad:notify', source, 'Unable to verify your identity.', 'error')
-        return
-    end
-
-    APIRequest('POST', '/gun-license', {
-        identifier = identifier,
-        civilianId = data.civilianId,
-    }, function(success, result)
-        if success and result then
-            if result.success then
-                TriggerClientEvent('cad:notify', source, result.message or 'Gun license issued!', 'success')
-            else
-                TriggerClientEvent('cad:notify', source, result.message or 'Failed to obtain gun license.', 'error')
-            end
-        else
-            TriggerClientEvent('cad:notify', source, 'Failed to apply for gun license.', 'error')
-        end
-    end)
-end)
-
--- ============================================================
--- Insurance Application
--- ============================================================
-RegisterNetEvent('cad:insurance:apply')
-AddEventHandler('cad:insurance:apply', function(data)
-    local source = source
-    local identifier = data.identifier
-    if not identifier then
-        TriggerClientEvent('cad:notify', source, 'Unable to verify your identity.', 'error')
-        return
-    end
-
-    APIRequest('POST', '/insurance', {
-        identifier = identifier,
-        plate = data.plate,
-        civilianId = data.civilianId,
-    }, function(success, result)
-        if success and result then
-            if result.success then
-                TriggerClientEvent('cad:notify', source, result.message or 'Insurance activated!', 'success')
-            else
-                TriggerClientEvent('cad:notify', source, result.message or 'Failed to get insurance.', 'error')
-            end
-        else
-            TriggerClientEvent('cad:notify', source, 'Failed to apply for insurance.', 'error')
-        end
-    end)
-end)
-
--- ============================================================
--- Character Info (ID Card)
--- ============================================================
-RegisterNetEvent('cad:character:info')
-AddEventHandler('cad:character:info', function()
-    local source = source
-    local identifier = GetPlayerIdentifier(source)
-    if not identifier then
-        TriggerClientEvent('cad:character:infoResult', source, { found = false })
-        return
-    end
-
-    APIRequest('POST', '/character-info', {
-        identifier = identifier,
-    }, function(success, result)
-        if success and result then
-            TriggerClientEvent('cad:character:infoResult', source, result)
-        else
-            TriggerClientEvent('cad:character:infoResult', source, { found = false })
-        end
-    end)
-end)
-
--- ============================================================
--- Initialization
--- ============================================================
-Citizen.CreateThread(function()
-    DetectFramework()
-    print('[CAD] Server initialized.')
-end)
+if Config.Logging.Enabled then
+    print('[CAD-MDT] Server initialized - Standalone ESX Legacy + oxmysql')
+end

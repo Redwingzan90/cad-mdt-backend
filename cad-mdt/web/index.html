@@ -1,156 +1,1568 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CAD/MDT System</title>
-    <style>
-      /* Prevent FiveM NUI issues */
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { overflow: hidden; background: transparent; }
-    </style>
-    <script type="module" crossorigin src="./assets/index-BZzoHglH.js"></script>
-    <link rel="modulepreload" crossorigin href="./assets/vendor-BJXKHWKR.js">
-    <link rel="modulepreload" crossorigin href="./assets/socket-BcxXcwBL.js">
-    <link rel="stylesheet" crossorigin href="./assets/index-GCH3Rt-p.css">
-  </head>
-  <body>
-    <div id="app"></div>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CAD/MDT System</title>
+  <style>
+    /* ============================================================
+       CAD-MDT Standalone - Full MDT Interface
+       ============================================================ */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
-    <!-- ID Card Overlay -->
-    <div id="idcard-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; z-index:99999; background:rgba(0,0,0,0.6); align-items:center; justify-content:center; font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
-      <div id="idcard" style="width:420px; background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%); border-radius:16px; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.1);">
-        <!-- Header -->
-        <div style="background:linear-gradient(90deg,#1a5276,#2e86c1); padding:14px 20px; display:flex; align-items:center; gap:12px;">
-          <div style="width:40px; height:40px; background:rgba(255,255,255,0.15); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:20px;">🏛️</div>
-          <div>
-            <div style="color:#fff; font-size:14px; font-weight:700; letter-spacing:1px;">STATE OF SAN ANDREAS</div>
-            <div style="color:rgba(255,255,255,0.7); font-size:11px;">IDENTIFICATION CARD</div>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: transparent;
+      color: #e0e0e0;
+      overflow: hidden;
+      height: 100vh;
+      user-select: none;
+    }
+
+    /* ============================================================
+       Main Container
+       ============================================================ */
+    #app-container {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 10000;
+    }
+    #app-container.visible { display: flex; }
+
+    /* ============================================================
+       Tablet Frame
+       ============================================================ */
+    .tablet-frame {
+      width: 85vw;
+      height: 85vh;
+      margin: auto;
+      background: #0a0e1a;
+      border-radius: 24px;
+      border: 3px solid #1a2332;
+      box-shadow: 0 25px 80px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.05);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      animation: tabletOpen 0.3s ease-out;
+    }
+    @keyframes tabletOpen {
+      from { transform: scale(0.9) translateY(20px); opacity: 0; }
+      to { transform: scale(1) translateY(0); opacity: 1; }
+    }
+
+    /* ============================================================
+       Header
+       ============================================================ */
+    .mdt-header {
+      background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
+      border-bottom: 1px solid #21262d;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .mdt-header-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .mdt-logo {
+      font-size: 18px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #58a6ff, #79c0ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+    .mdt-logo span {
+      font-size: 11px;
+      font-weight: 400;
+      opacity: 0.6;
+      -webkit-text-fill-color: #8b949e;
+    }
+    .duty-badge {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+    .duty-badge.on-duty {
+      background: rgba(35, 134, 54, 0.3);
+      color: #3fb950;
+      border: 1px solid rgba(35, 134, 54, 0.4);
+    }
+    .duty-badge.off-duty {
+      background: rgba(139, 148, 158, 0.15);
+      color: #8b949e;
+      border: 1px solid rgba(139, 148, 158, 0.2);
+    }
+    .mdt-header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .mdt-header-right .callsign {
+      font-size: 13px;
+      color: #58a6ff;
+      font-weight: 600;
+    }
+    .mdt-header-right .player-name {
+      font-size: 12px;
+      color: #8b949e;
+    }
+    .close-btn {
+      width: 32px; height: 32px;
+      background: rgba(248, 81, 73, 0.15);
+      border: 1px solid rgba(248, 81, 73, 0.3);
+      border-radius: 8px;
+      color: #f85149;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .close-btn:hover {
+      background: rgba(248, 81, 73, 0.3);
+      transform: scale(1.05);
+    }
+
+    /* ============================================================
+       Sidebar Navigation
+       ============================================================ */
+    .mdt-body {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+    .sidebar {
+      width: 200px;
+      background: #0d1117;
+      border-right: 1px solid #21262d;
+      padding: 8px 0;
+      flex-shrink: 0;
+      overflow-y: auto;
+    }
+    .sidebar-section {
+      padding: 8px 12px 4px;
+      font-size: 10px;
+      font-weight: 600;
+      color: #484f58;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 16px;
+      margin: 1px 8px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      color: #8b949e;
+      transition: all 0.15s;
+    }
+    .nav-item:hover {
+      background: rgba(88, 166, 255, 0.08);
+      color: #c9d1d9;
+    }
+    .nav-item.active {
+      background: rgba(88, 166, 255, 0.15);
+      color: #58a6ff;
+      font-weight: 500;
+    }
+    .nav-item .icon { font-size: 16px; width: 20px; text-align: center; }
+    .nav-badge {
+      margin-left: auto;
+      background: #f85149;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 10px;
+      min-width: 18px;
+      text-align: center;
+    }
+
+    /* ============================================================
+       Main Content Area
+       ============================================================ */
+    .content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      background: #0d1117;
+    }
+    .content::-webkit-scrollbar { width: 6px; }
+    .content::-webkit-scrollbar-track { background: transparent; }
+    .content::-webkit-scrollbar-thumb { background: #21262d; border-radius: 3px; }
+    .content::-webkit-scrollbar-thumb:hover { background: #30363d; }
+
+    .page { display: none; }
+    .page.active { display: block; animation: fadeIn 0.2s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+    .page-title {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      color: #e6edf3;
+    }
+
+    /* ============================================================
+       Status Bar
+       ============================================================ */
+    .status-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .status-btn {
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid #30363d;
+      background: #161b22;
+      color: #8b949e;
+      transition: all 0.2s;
+    }
+    .status-btn:hover { border-color: #58a6ff; color: #c9d1d9; }
+    .status-btn.active {
+      background: rgba(88, 166, 255, 0.15);
+      border-color: #58a6ff;
+      color: #58a6ff;
+    }
+    .status-btn.emergency {
+      background: rgba(248, 81, 73, 0.15);
+      border-color: rgba(248, 81, 73, 0.4);
+      color: #f85149;
+    }
+    .status-btn.panic {
+      background: rgba(248, 81, 73, 0.3);
+      border-color: #f85149;
+      color: #fff;
+      animation: panicPulse 1s infinite;
+    }
+    @keyframes panicPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(248, 81, 73, 0.4); }
+      50% { box-shadow: 0 0 0 6px rgba(248, 81, 73, 0); }
+    }
+
+    /* ============================================================
+       Cards
+       ============================================================ */
+    .card {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #e6edf3;
+    }
+
+    /* ============================================================
+       Dashboard Grid
+       ============================================================ */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .stat-card {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .stat-icon {
+      width: 44px; height: 44px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+    .stat-icon.blue { background: rgba(88, 166, 255, 0.15); }
+    .stat-icon.green { background: rgba(63, 185, 80, 0.15); }
+    .stat-icon.orange { background: rgba(210, 153, 34, 0.15); }
+    .stat-icon.red { background: rgba(248, 81, 73, 0.15); }
+    .stat-info .stat-number { font-size: 24px; font-weight: 700; color: #e6edf3; }
+    .stat-info .stat-label { font-size: 11px; color: #8b949e; margin-top: 2px; }
+
+    /* ============================================================
+       Tables
+       ============================================================ */
+    .table-container { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th {
+      text-align: left;
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid #21262d;
+    }
+    td {
+      padding: 10px 12px;
+      font-size: 13px;
+      color: #c9d1d9;
+      border-bottom: 1px solid rgba(33, 38, 45, 0.5);
+    }
+    tr:hover td { background: rgba(88, 166, 255, 0.04); }
+
+    /* ============================================================
+       Priority Badges
+       ============================================================ */
+    .priority-badge {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+    .priority-badge.p1 { background: rgba(248, 81, 73, 0.2); color: #f85149; }
+    .priority-badge.p2 { background: rgba(210, 153, 34, 0.2); color: #d29922; }
+    .priority-badge.p3 { background: rgba(88, 166, 255, 0.15); color: #58a6ff; }
+    .priority-badge.pending { background: rgba(210, 153, 34, 0.2); color: #d29922; }
+    .priority-badge.assigned { background: rgba(88, 166, 255, 0.15); color: #58a6ff; }
+    .priority-badge.completed { background: rgba(63, 185, 80, 0.15); color: #3fb950; }
+
+    /* ============================================================
+       Forms
+       ============================================================ */
+    .form-group { margin-bottom: 12px; }
+    .form-label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: #8b949e;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .form-input, .form-select, .form-textarea {
+      width: 100%;
+      padding: 8px 12px;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      color: #c9d1d9;
+      font-size: 13px;
+      font-family: inherit;
+      transition: border-color 0.2s;
+    }
+    .form-input:focus, .form-select:focus, .form-textarea:focus {
+      outline: none;
+      border-color: #58a6ff;
+      box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1);
+    }
+    .form-textarea { min-height: 80px; resize: vertical; }
+    .form-row { display: flex; gap: 12px; }
+    .form-row .form-group { flex: 1; }
+
+    /* ============================================================
+       Buttons
+       ============================================================ */
+    .btn {
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+    .btn-primary {
+      background: #238636;
+      color: #fff;
+    }
+    .btn-primary:hover { background: #2ea043; transform: translateY(-1px); }
+    .btn-secondary {
+      background: #21262d;
+      color: #c9d1d9;
+      border: 1px solid #30363d;
+    }
+    .btn-secondary:hover { background: #30363d; }
+    .btn-danger {
+      background: rgba(248, 81, 73, 0.15);
+      color: #f85149;
+      border: 1px solid rgba(248, 81, 73, 0.3);
+    }
+    .btn-danger:hover { background: rgba(248, 81, 73, 0.3); }
+    .btn-sm { padding: 4px 10px; font-size: 11px; }
+
+    /* ============================================================
+       Search Bar
+       ============================================================ */
+    .search-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .search-bar .form-input { flex: 1; }
+
+    /* ============================================================
+       Call Item
+       ============================================================ */
+    .call-item {
+      background: #0d1117;
+      border: 1px solid #21262d;
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: all 0.15s;
+    }
+    .call-item:hover { border-color: #30363d; }
+    .call-item .call-priority {
+      width: 4px;
+      height: 40px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+    .call-item .call-priority.p1 { background: #f85149; }
+    .call-item .call-priority.p2 { background: #d29922; }
+    .call-item .call-priority.p3 { background: #58a6ff; }
+    .call-item .call-info { flex: 1; }
+    .call-item .call-type { font-size: 13px; font-weight: 600; color: #e6edf3; }
+    .call-item .call-location { font-size: 12px; color: #8b949e; margin-top: 2px; }
+    .call-item .call-meta { text-align: right; }
+    .call-item .call-time { font-size: 11px; color: #484f58; }
+    .call-item .call-actions { display: flex; gap: 6px; margin-top: 6px; }
+
+    /* ============================================================
+       Unit Item
+       ============================================================ */
+    .unit-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: #0d1117;
+      border: 1px solid #21262d;
+      margin-bottom: 6px;
+    }
+    .unit-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .unit-dot.available { background: #3fb950; }
+    .unit-dot.busy { background: #d29922; }
+    .unit-dot.off-duty { background: #484f58; }
+    .unit-info .unit-callsign { font-size: 13px; font-weight: 600; color: #e6edf3; }
+    .unit-info .unit-dept { font-size: 11px; color: #8b949e; }
+    .unit-status { margin-left: auto; font-size: 11px; color: #8b949e; }
+
+    /* ============================================================
+       BOLO Item
+       ============================================================ */
+    .bolo-item {
+      background: #0d1117;
+      border: 1px solid #21262d;
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-bottom: 8px;
+      border-left: 3px solid #d29922;
+    }
+    .bolo-item.high { border-left-color: #f85149; }
+    .bolo-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .bolo-type { font-size: 13px; font-weight: 600; color: #e6edf3; }
+    .bolo-desc { font-size: 12px; color: #8b949e; }
+
+    /* ============================================================
+       Tabs
+       ============================================================ */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid #21262d;
+      padding-bottom: 0;
+    }
+    .tab {
+      padding: 8px 16px;
+      font-size: 13px;
+      color: #8b949e;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: all 0.2s;
+    }
+    .tab:hover { color: #c9d1d9; }
+    .tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+
+    /* ============================================================
+       On Duty / Off Duty Overlay
+       ============================================================ */
+    .duty-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 20000;
+      align-items: center;
+      justify-content: center;
+    }
+    .duty-overlay.visible { display: flex; }
+    .duty-panel {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 16px;
+      padding: 32px;
+      width: 400px;
+      text-align: center;
+    }
+    .duty-panel h2 { font-size: 20px; color: #e6edf3; margin-bottom: 8px; }
+    .duty-panel p { font-size: 13px; color: #8b949e; margin-bottom: 20px; }
+
+    /* ============================================================
+       Notification Toast
+       ============================================================ */
+    .toast-container {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 99999;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .toast {
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 500;
+      animation: toastIn 0.3s ease;
+      max-width: 350px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    .toast.success { background: #238636; color: #fff; }
+    .toast.error { background: #da3633; color: #fff; }
+    .toast.primary { background: #1f6feb; color: #fff; }
+    .toast.warning { background: #9e6a03; color: #fff; }
+    @keyframes toastIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+    /* ============================================================
+       ID Card Overlay
+       ============================================================ */
+    #idcard-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 99999;
+      background: rgba(0,0,0,0.6);
+      align-items: center;
+      justify-content: center;
+    }
+    #idcard-overlay.visible { display: flex; }
+    .idcard {
+      width: 420px;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .idcard-header {
+      background: linear-gradient(90deg, #1a5276, #2e86c1);
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .idcard-header .icon {
+      width: 40px; height: 40px;
+      background: rgba(255,255,255,0.15);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+    .idcard-header .title { color: #fff; font-size: 14px; font-weight: 700; letter-spacing: 1px; }
+    .idcard-header .subtitle { color: rgba(255,255,255,0.7); font-size: 11px; }
+    .idcard-body { padding: 20px; display: flex; gap: 16px; }
+    .idcard-portrait {
+      width: 100px; height: 120px;
+      background: linear-gradient(135deg, #2c3e50, #34495e);
+      border-radius: 10px;
+      border: 2px solid rgba(46,134,193,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .idcard-portrait img { width: 100%; height: 100%; object-fit: cover; }
+    .idcard-info { flex: 1; color: #fff; }
+    .idcard-info .name { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+    .idcard-info .detail { font-size: 12px; line-height: 1.8; color: rgba(255,255,255,0.8); }
+    .idcard-info .detail strong { color: #2e86c1; }
+    .idcard-section { padding: 0 20px 8px; }
+    .idcard-section-title {
+      font-size: 10px;
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 4px;
+      letter-spacing: 1px;
+    }
+    .idcard-tag {
+      display: inline-block;
+      font-size: 10px;
+      background: rgba(255,255,255,0.1);
+      padding: 3px 8px;
+      border-radius: 4px;
+      color: rgba(255,255,255,0.8);
+      margin: 2px;
+    }
+    .idcard-tag.valid { border-left: 3px solid #27ae60; }
+    .idcard-tag.invalid { border-left: 3px solid #e74c3c; }
+    .idcard-tag.warning { border-left: 3px solid #f39c12; }
+    .idcard-footer {
+      background: rgba(0,0,0,0.3);
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 9px;
+      color: rgba(255,255,255,0.4);
+    }
+  </style>
+</head>
+<body>
+  <!-- Toast Notifications -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- ============================================================
+       Main MDT App
+       ============================================================ -->
+  <div id="app-container">
+    <div class="tablet-frame">
+      <!-- Header -->
+      <div class="mdt-header">
+        <div class="mdt-header-left">
+          <div class="mdt-logo">CAD/MDT <span>v2.0</span></div>
+          <div class="duty-badge off-duty" id="duty-badge">OFF DUTY</div>
+        </div>
+        <div class="mdt-header-right">
+          <span class="callsign" id="header-callsign"></span>
+          <span class="player-name" id="header-player"></span>
+          <button class="close-btn" onclick="closeMDT()">✕</button>
+        </div>
+      </div>
+
+      <div class="mdt-body">
+        <!-- Sidebar -->
+        <div class="sidebar">
+          <div class="sidebar-section">Operations</div>
+          <div class="nav-item active" onclick="showPage('dashboard')" data-page="dashboard">
+            <span class="icon">📊</span> Dashboard
+          </div>
+          <div class="nav-item" onclick="showPage('dispatch')" data-page="dispatch">
+            <span class="icon">📞</span> Dispatch
+            <span class="nav-badge" id="dispatch-badge" style="display:none">0</span>
+          </div>
+          <div class="nav-item" onclick="showPage('units')" data-page="units">
+            <span class="icon">👮</span> Units
+          </div>
+
+          <div class="sidebar-section">Records</div>
+          <div class="nav-item" onclick="showPage('civilians')" data-page="civilians">
+            <span class="icon">👤</span> Civilians
+          </div>
+          <div class="nav-item" onclick="showPage('vehicles')" data-page="vehicles">
+            <span class="icon">🚗</span> Vehicles
+          </div>
+
+          <div class="sidebar-section">Enforcement</div>
+          <div class="nav-item" onclick="showPage('bolos')" data-page="bolos">
+            <span class="icon">🚨</span> BOLOs
+          </div>
+          <div class="nav-item" onclick="showPage('reports')" data-page="reports">
+            <span class="icon">📝</span> Reports
           </div>
         </div>
 
         <!-- Content -->
-        <div style="padding:20px; display:flex; gap:16px;">
-          <!-- Portrait -->
-          <div style="flex-shrink:0;">
-            <div id="idcard-portrait" style="width:100px; height:120px; background:linear-gradient(135deg,#2c3e50,#34495e); border-radius:10px; border:2px solid rgba(46,134,193,0.5); display:flex; align-items:center; justify-content:center; overflow:hidden;">
-              <div style="font-size:48px;">👤</div>
+        <div class="content">
+          <!-- Dashboard Page -->
+          <div class="page active" id="page-dashboard">
+            <div class="page-title">Dashboard</div>
+
+            <!-- Status Bar -->
+            <div class="status-bar" id="status-bar">
+              <button class="status-btn active" onclick="setStatus('AVAILABLE')">✅ Available</button>
+              <button class="status-btn" onclick="setStatus('EN ROUTE')">🚗 En Route</button>
+              <button class="status-btn" onclick="setStatus('ON SCENE')">📍 On Scene</button>
+              <button class="status-btn emergency" onclick="setStatus('EMERGENCY')">🚨 Emergency</button>
+              <button class="status-btn" onclick="setStatus('BUSY')">⏳ Busy</button>
+              <button class="status-btn panic" onclick="setStatus('PANIC')">🆘 Panic</button>
             </div>
-            <div style="text-align:center; margin-top:6px; font-size:9px; color:rgba(255,255,255,0.4);">OFFICIAL PHOTO</div>
+
+            <!-- Stats Grid -->
+            <div class="dashboard-grid">
+              <div class="stat-card">
+                <div class="stat-icon blue">📞</div>
+                <div class="stat-info">
+                  <div class="stat-number" id="stat-active-calls">0</div>
+                  <div class="stat-label">Active Calls</div>
+                </div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon green">👮</div>
+                <div class="stat-info">
+                  <div class="stat-number" id="stat-units-on">0</div>
+                  <div class="stat-label">Units On Duty</div>
+                </div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon orange">🚨</div>
+                <div class="stat-info">
+                  <div class="stat-number" id="stat-open-bolos">0</div>
+                  <div class="stat-label">Active BOLOs</div>
+                </div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon red">⚠️</div>
+                <div class="stat-info">
+                  <div class="stat-number" id="stat-priority">0</div>
+                  <div class="stat-label">Priority 1 Calls</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Recent Calls -->
+            <div class="card" style="margin-top: 12px;">
+              <div class="card-header">
+                <div class="card-title">Recent Dispatch Calls</div>
+                <button class="btn btn-secondary btn-sm" onclick="refreshCalls()">Refresh</button>
+              </div>
+              <div id="dashboard-calls">
+                <div style="text-align:center; padding:20px; color:#484f58; font-size:13px;">No active calls</div>
+              </div>
+            </div>
           </div>
 
-          <!-- Info -->
-          <div style="flex:1; color:#fff;">
-            <div id="idcard-name" style="font-size:20px; font-weight:700; margin-bottom:8px;">---</div>
-            <div id="idcard-details" style="font-size:12px; line-height:1.8; color:rgba(255,255,255,0.8);"></div>
+          <!-- Dispatch Page -->
+          <div class="page" id="page-dispatch">
+            <div class="page-title">Dispatch Center</div>
+            <div class="tabs">
+              <div class="tab active" onclick="showDispatchTab('active')">Active Calls</div>
+              <div class="tab" onclick="showDispatchTab('create')">Create Call</div>
+              <div class="tab" onclick="showDispatchTab('history')">Completed</div>
+            </div>
+            <div id="dispatch-active">
+              <div id="dispatch-calls-list">
+                <div style="text-align:center; padding:30px; color:#484f58;">No active dispatch calls</div>
+              </div>
+            </div>
+            <div id="dispatch-create" style="display:none">
+              <div class="card">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">Call Type</label>
+                    <select class="form-select" id="dispatch-type">
+                      <option>10-31 - Crime in Progress</option>
+                      <option>10-33 - Emergency</option>
+                      <option>10-50 - Accident</option>
+                      <option>10-55 - Intoxicated Driver</option>
+                      <option>10-70 - Foot Pursuit</option>
+                      <option>10-80 - Vehicle Pursuit</option>
+                      <option>Suspicious Person</option>
+                      <option>Domestic Disturbance</option>
+                      <option>Robbery</option>
+                      <option>Shots Fired</option>
+                      <option>Other</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Priority</label>
+                    <select class="form-select" id="dispatch-priority">
+                      <option value="PRIORITY_1">Priority 1 - Immediate</option>
+                      <option value="PRIORITY_2">Priority 2 - Urgent</option>
+                      <option value="PRIORITY_3" selected>Priority 3 - Non-Urgent</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Location</label>
+                  <input class="form-input" id="dispatch-location" placeholder="Enter location...">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Description</label>
+                  <textarea class="form-textarea" id="dispatch-description" placeholder="Describe the situation..."></textarea>
+                </div>
+                <div style="display:flex; gap:8px; justify-content:flex-end;">
+                  <button class="btn btn-primary" onclick="createDispatchCall()">Create Dispatch Call</button>
+                </div>
+              </div>
+            </div>
+            <div id="dispatch-history" style="display:none">
+              <div style="text-align:center; padding:30px; color:#484f58;">Completed calls will appear here</div>
+            </div>
           </div>
-        </div>
 
-        <!-- Licenses -->
-        <div id="idcard-licenses" style="padding:0 20px 8px;"></div>
+          <!-- Units Page -->
+          <div class="page" id="page-units">
+            <div class="page-title">Active Units</div>
+            <div id="units-list">
+              <div style="text-align:center; padding:30px; color:#484f58;">No units on duty</div>
+            </div>
+          </div>
 
-        <!-- Vehicles -->
-        <div id="idcard-vehicles" style="padding:0 20px 8px;"></div>
+          <!-- Civilians Page -->
+          <div class="page" id="page-civilians">
+            <div class="page-title">Civilian Records</div>
+            <div class="search-bar">
+              <input class="form-input" id="civ-search" placeholder="Search by name or phone..." onkeydown="if(event.key==='Enter')searchCivilians()">
+              <button class="btn btn-primary" onclick="searchCivilians()">Search</button>
+            </div>
+            <div id="civ-results">
+              <div style="text-align:center; padding:30px; color:#484f58;">Enter a search query</div>
+            </div>
+          </div>
 
-        <!-- Criminal Record -->
-        <div id="idcard-criminal" style="padding:0 20px 12px;"></div>
+          <!-- Vehicles Page -->
+          <div class="page" id="page-vehicles">
+            <div class="page-title">Vehicle Records</div>
+            <div class="search-bar">
+              <input class="form-input" id="veh-search" placeholder="Search by plate, model, or VIN..." onkeydown="if(event.key==='Enter')searchVehicles()">
+              <button class="btn btn-primary" onclick="searchVehicles()">Search</button>
+            </div>
+            <div id="veh-results">
+              <div style="text-align:center; padding:30px; color:#484f58;">Enter a search query</div>
+            </div>
+          </div>
 
-        <!-- Footer -->
-        <div style="background:rgba(0,0,0,0.3); padding:10px 20px; display:flex; justify-content:space-between; align-items:center;">
-          <div style="font-size:9px; color:rgba(255,255,255,0.4);">LOS SANTOS DMV • DIGITAL ID</div>
-          <div style="font-size:9px; color:rgba(255,255,255,0.4);">Press F2 to close</div>
+          <!-- BOLOs Page -->
+          <div class="page" id="page-bolos">
+            <div class="page-title">BOLOs</div>
+            <div class="tabs">
+              <div class="tab active" onclick="showBoloTab('list')">Active BOLOs</div>
+              <div class="tab" onclick="showBoloTab('create')">Create BOLO</div>
+            </div>
+            <div id="bolo-list">
+              <div style="text-align:center; padding:30px; color:#484f58;">No active BOLOs</div>
+            </div>
+            <div id="bolo-create" style="display:none">
+              <div class="card">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">Type</label>
+                    <select class="form-select" id="bolo-type">
+                      <option value="PERSON">Person</option>
+                      <option value="VEHICLE">Vehicle</option>
+                      <option value="LOCATION">Location</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Priority</label>
+                    <select class="form-select" id="bolo-priority">
+                      <option value="HIGH">High</option>
+                      <option value="MEDIUM" selected>Medium</option>
+                      <option value="LOW">Low</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Description</label>
+                  <textarea class="form-textarea" id="bolo-description" placeholder="Describe the BOLO subject..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Last Known Location</label>
+                  <input class="form-input" id="bolo-location" placeholder="Enter location...">
+                </div>
+                <div style="display:flex; gap:8px; justify-content:flex-end;">
+                  <button class="btn btn-primary" onclick="createBOLO()">Create BOLO</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Reports Page -->
+          <div class="page" id="page-reports">
+            <div class="page-title">Reports</div>
+            <div class="tabs">
+              <div class="tab active" onclick="showReportTab('create')">New Report</div>
+              <div class="tab" onclick="showReportTab('list')">My Reports</div>
+            </div>
+            <div id="report-create">
+              <div class="card">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">Report Type</label>
+                    <select class="form-select" id="report-type">
+                      <option value="Incident Report">Incident Report</option>
+                      <option value="Arrest Report">Arrest Report</option>
+                      <option value="Use of Force">Use of Force</option>
+                      <option value="Accident Report">Accident Report</option>
+                      <option value="Citation">Citation</option>
+                      <option value="Warning">Verbal Warning</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Location</label>
+                    <input class="form-input" id="report-location" placeholder="Enter location...">
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Narrative</label>
+                  <textarea class="form-textarea" id="report-narrative" placeholder="Write your report narrative..." style="min-height:150px;"></textarea>
+                </div>
+                <div style="display:flex; gap:8px; justify-content:flex-end;">
+                  <button class="btn btn-secondary">Save Draft</button>
+                  <button class="btn btn-primary" onclick="createReport()">Submit Report</button>
+                </div>
+              </div>
+            </div>
+            <div id="report-list" style="display:none">
+              <div style="text-align:center; padding:30px; color:#484f58;">Your reports will appear here</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
+  </div>
 
-    <script>
-      // ID Card NUI Message Handler
-      window.addEventListener('message', function(event) {
-        var data = event.data;
-        if (data.action === 'showIDCard') {
-          var overlay = document.getElementById('idcard-overlay');
-          var char = data.character;
-          if (!char) return;
+  <!-- ============================================================
+       Duty On/Off Panel
+       ============================================================ -->
+  <div class="duty-overlay" id="duty-overlay">
+    <div class="duty-panel">
+      <h2 id="duty-panel-title">Go On Duty?</h2>
+      <p id="duty-panel-desc">Enter your callsign and department to go on duty.</p>
+      <div class="form-group" style="text-align:left;">
+        <label class="form-label">Callsign</label>
+        <input class="form-input" id="duty-callsign" placeholder="e.g. 1-ADAM-12">
+      </div>
+      <div class="form-group" style="text-align:left;">
+        <label class="form-label">Department</label>
+        <select class="form-select" id="duty-department">
+          <option value="LSPD">LSPD - Los Santos Police Dept</option>
+          <option value="BCSO">BCSO - Blaine County Sheriff</option>
+          <option value="SAHP">SAHP - San Andreas Highway Patrol</option>
+          <option value="LSFD">LSFD - Los Santos Fire Dept</option>
+        </select>
+      </div>
+      <div style="display:flex; gap:8px; justify-content:center; margin-top:16px;">
+        <button class="btn btn-secondary" onclick="toggleDutyPanel(false)">Cancel</button>
+        <button class="btn btn-primary" onclick="submitDuty()">Confirm</button>
+      </div>
+    </div>
+  </div>
 
-          overlay.style.display = 'flex';
-          overlay.style.alignItems = 'center';
-          overlay.style.justifyContent = 'center';
+  <!-- ============================================================
+       ID Card Overlay
+       ============================================================ -->
+  <div id="idcard-overlay">
+    <div class="idcard">
+      <div class="idcard-header">
+        <div class="icon">🏛️</div>
+        <div>
+          <div class="title">STATE OF SAN ANDREAS</div>
+          <div class="subtitle">IDENTIFICATION CARD</div>
+        </div>
+      </div>
+      <div class="idcard-body">
+        <div class="idcard-portrait" id="idcard-portrait">
+          <div style="font-size:48px;">👤</div>
+        </div>
+        <div class="idcard-info">
+          <div class="name" id="idcard-name">---</div>
+          <div class="detail" id="idcard-details"></div>
+        </div>
+      </div>
+      <div class="idcard-section" id="idcard-licenses"></div>
+      <div class="idcard-section" id="idcard-vehicles"></div>
+      <div class="idcard-section" id="idcard-criminal"></div>
+      <div class="idcard-footer">
+        <span>LOS SANTOS DMV • DIGITAL ID</span>
+        <span>Press F2 to close</span>
+      </div>
+    </div>
+  </div>
 
-        } else if (data.action === 'setHeadshot') {
-          var portrait = document.getElementById('idcard-portrait');
-          if (portrait && data.textureDict && data.textureName) {
-            portrait.innerHTML = '<img src="nui://' + data.textureDict + '/' + data.textureName + '" style="width:100%; height:100%; object-fit:cover; border-radius:8px;" onerror="this.style.display=\'none\'">';
-          }
+  <!-- ============================================================
+       JavaScript
+       ============================================================ -->
+  <script>
+    // State
+    var appVisible = false;
+    var isOnDuty = false;
+    var activeCalls = [];
+    var allUnits = [];
 
-          // Name
-          document.getElementById('idcard-name').textContent = char.firstName + ' ' + char.lastName;
+    // NUI Message Handler
+    window.addEventListener('message', function(event) {
+      var d = event.data;
 
-          // Details
-          var detailsHtml = '';
-          detailsHtml += '<div><strong style="color:#2e86c1;">DOB:</strong> ' + (char.dateOfBirth || 'N/A') + '</div>';
-          detailsHtml += '<div><strong style="color:#2e86c1;">Gender:</strong> ' + (char.gender || 'N/A') + '</div>';
-          detailsHtml += '<div><strong style="color:#2e86c1;">Address:</strong> ' + (char.address || 'N/A') + '</div>';
-          detailsHtml += '<div><strong style="color:#2e86c1;">Phone:</strong> ' + (char.phone || 'N/A') + '</div>';
-          document.getElementById('idcard-details').innerHTML = detailsHtml;
-
-          // Licenses
-          var licHtml = '';
-          if (char.licenses && char.licenses.length > 0) {
-            licHtml += '<div style="font-size:10px; color:rgba(255,255,255,0.5); margin-bottom:4px; letter-spacing:1px;">LICENSES</div>';
-            licHtml += '<div style="display:flex; flex-wrap:wrap; gap:4px;">';
-            char.licenses.forEach(function(l) {
-              var color = l.status === 'VALID' ? '#27ae60' : (l.status === 'SUSPENDED' || l.status === 'REVOKED') ? '#e74c3c' : '#f39c12';
-              licHtml += '<span style="font-size:10px; background:rgba(255,255,255,0.1); border-left:3px solid ' + color + '; padding:3px 8px; border-radius:4px; color:rgba(255,255,255,0.8);">' + l.type.toUpperCase() + ' - ' + l.number + '</span>';
-            });
-            licHtml += '</div>';
-          }
-          document.getElementById('idcard-licenses').innerHTML = licHtml;
-
-          // Vehicles
-          var vehEl = document.getElementById('idcard-vehicles');
-          if (vehEl) {
-            var vehHtml = '';
-            if (char.vehicles && char.vehicles.length > 0) {
-              vehHtml += '<div style="font-size:10px; color:rgba(255,255,255,0.5); margin-bottom:4px; letter-spacing:1px;">REGISTERED VEHICLES</div>';
-              vehHtml += '<div style="display:flex; flex-wrap:wrap; gap:4px;">';
-              char.vehicles.forEach(function(v) {
-                vehHtml += '<span style="font-size:10px; background:rgba(255,255,255,0.1); padding:3px 8px; border-radius:4px; color:rgba(255,255,255,0.8);">' + v.plate + ' - ' + v.color + ' ' + v.model + '</span>';
-              });
-              vehHtml += '</div>';
-            } else {
-              vehHtml = '<div style="font-size:10px; color:rgba(255,255,255,0.4);">No registered vehicles</div>';
-            }
-            vehEl.innerHTML = vehHtml;
-          }
-
-          // Criminal Record
-          var crimEl = document.getElementById('idcard-criminal');
-          if (crimEl) {
-            var crimHtml = '';
-            var total = (char.citationCount || 0) + (char.warningCount || 0) + (char.arrestCount || 0);
-            if (total > 0 || (char.warrants && char.warrants.length > 0)) {
-              crimHtml += '<div style="font-size:10px; color:rgba(255,255,255,0.5); margin-bottom:4px; letter-spacing:1px;">RECORD</div>';
-              crimHtml += '<div style="display:flex; flex-wrap:wrap; gap:6px;">';
-              if (char.arrestCount) crimHtml += '<span style="font-size:10px; background:rgba(231,76,60,0.2); border-left:3px solid #e74c3c; padding:3px 8px; border-radius:4px; color:rgba(255,255,255,0.8);">ARRESTS: ' + char.arrestCount + '</span>';
-              if (char.citationCount) crimHtml += '<span style="font-size:10px; background:rgba(243,156,18,0.2); border-left:3px solid #f39c12; padding:3px 8px; border-radius:4px; color:rgba(255,255,255,0.8);">CITATIONS: ' + char.citationCount + '</span>';
-              if (char.warningCount) crimHtml += '<span style="font-size:10px; background:rgba(241,196,15,0.2); border-left:3px solid #f1c40f; padding:3px 8px; border-radius:4px; color:rgba(255,255,255,0.8);">WARNINGS: ' + char.warningCount + '</span>';
-              crimHtml += '</div>';
-              if (char.warrants && char.warrants.length > 0) {
-                char.warrants.forEach(function(w) {
-                  crimHtml += '<div style="margin-top:4px; font-size:10px; background:rgba(231,76,60,0.15); border-left:3px solid #e74c3c; padding:4px 8px; border-radius:4px; color:rgba(255,255,255,0.9);">⚠️ WARRANT ' + w.warrantNumber + ': ' + (w.charges || 'N/A') + '</div>';
-                });
-              }
-            } else {
-              crimHtml = '<div style="font-size:10px; color:rgba(39,174,96,0.8);">✓ Clean Record</div>';
-            }
-            crimEl.innerHTML = crimHtml;
-          }
-
-        } else if (data.action === 'hideIDCard') {
-          document.getElementById('idcard-overlay').style.display = 'none';
+      if (d.action === 'open') {
+        appVisible = true;
+        document.getElementById('app-container').classList.add('visible');
+        document.getElementById('header-player').textContent = d.playerName || '';
+        document.getElementById('header-callsign').textContent = d.callsign || '';
+        if (d.isOnDuty) {
+          isOnDuty = true;
+          updateDutyUI(true, d.officerData);
         }
-      });
-    </script>
-  </body>
+        // Request initial data
+        fetch('./activeCalls.json').catch(function(){});
+      }
+
+      else if (d.action === 'close') {
+        appVisible = false;
+        document.getElementById('app-container').classList.remove('visible');
+      }
+
+      else if (d.action === 'dutyChanged') {
+        isOnDuty = d.isOnDuty;
+        updateDutyUI(d.isOnDuty, d.officerData);
+      }
+
+      else if (d.action === 'newDispatchCall') {
+        var call = d.data;
+        activeCalls.unshift(call);
+        updateCallUI();
+        showToast('New Call: ' + (call.type || 'Unknown'), 'warning');
+      }
+
+      else if (d.action === 'updateDispatchCall') {
+        for (var i = 0; i < activeCalls.length; i++) {
+          if (activeCalls[i].id === d.data.id) {
+            activeCalls[i].status = d.data.status;
+            break;
+          }
+        }
+        updateCallUI();
+      }
+
+      else if (d.action === 'activeCallsList') {
+        activeCalls = d.data || [];
+        updateCallUI();
+      }
+
+      else if (d.action === 'unitList') {
+        allUnits = d.data || [];
+        updateUnitUI();
+      }
+
+      else if (d.action === 'boloAlert') {
+        showToast('🚨 NEW BOLO: ' + (d.data.description || ''), 'error');
+      }
+
+      else if (d.action === 'searchResults') {
+        handleSearchResults(d.data);
+      }
+
+      else if (d.action === 'plateResult') {
+        showPlateResult(d.data);
+      }
+
+      else if (d.action === 'notification') {
+        showToast(d.data.message || d.data.title || '', d.data.type || 'primary');
+      }
+
+      // ID Card
+      else if (d.action === 'showIDCard') {
+        showIDCard(d.character);
+      }
+      else if (d.action === 'hideIDCard') {
+        document.getElementById('idcard-overlay').classList.remove('visible');
+      }
+
+      // NPC form openers
+      else if (d.action === 'openDMVRegistration') {
+        showNPCForm('dmv', d);
+      }
+      else if (d.action === 'openCivilianRegistration') {
+        showNPCForm('civreg', d);
+      }
+      else if (d.action === 'openGunLicense') {
+        showNPCForm('gunlicense', d);
+      }
+      else if (d.action === 'openInsurance') {
+        showNPCForm('insurance', d);
+      }
+    });
+
+    // ============================================================
+    // Close MDT
+    // ============================================================
+    function closeMDT() {
+      fetch('https://cad-mdt/close', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({}) });
+    }
+
+    // ============================================================
+    // Duty System
+    // ============================================================
+    function updateDutyUI(onDuty, data) {
+      var badge = document.getElementById('duty-badge');
+      badge.textContent = onDuty ? 'ON DUTY' : 'OFF DUTY';
+      badge.className = 'duty-badge ' + (onDuty ? 'on-duty' : 'off-duty');
+      if (data && data.callsign) {
+        document.getElementById('header-callsign').textContent = data.callsign + ' | ' + (data.department || '');
+      }
+    }
+
+    function toggleDutyPanel(show) {
+      document.getElementById('duty-overlay').classList.toggle('visible', show);
+    }
+
+    function submitDuty() {
+      var callsign = document.getElementById('duty-callsign').value;
+      var dept = document.getElementById('duty-department').value;
+      if (!callsign) { showToast('Enter a callsign', 'error'); return; }
+      if (isOnDuty) {
+        fetch('https://cad-mdt/goOffDuty', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({}) });
+      } else {
+        fetch('https://cad-mdt/goOnDuty', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ callsign: callsign, department: dept }) });
+      }
+      toggleDutyPanel(false);
+    }
+
+    // ============================================================
+    // Status Updates
+    // ============================================================
+    function setStatus(status) {
+      var btns = document.querySelectorAll('#status-bar .status-btn');
+      btns.forEach(function(b) { b.classList.remove('active'); });
+      event.target.classList.add('active');
+      fetch('https://cad-mdt/updateStatus', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ status: status }) });
+    }
+
+    // ============================================================
+    // Navigation
+    // ============================================================
+    function showPage(page) {
+      document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
+      document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
+      document.getElementById('page-' + page).classList.add('active');
+      document.querySelector('[data-page="' + page + '"]').classList.add('active');
+      // Refresh data for certain pages
+      if (page === 'dispatch') refreshCalls();
+      if (page === 'units') refreshUnits();
+    }
+
+    function showDispatchTab(tab) {
+      document.querySelectorAll('#page-dispatch .tab').forEach(function(t) { t.classList.remove('active'); });
+      event.target.classList.add('active');
+      document.getElementById('dispatch-active').style.display = tab === 'active' ? 'block' : 'none';
+      document.getElementById('dispatch-create').style.display = tab === 'create' ? 'block' : 'none';
+      document.getElementById('dispatch-history').style.display = tab === 'history' ? 'block' : 'none';
+    }
+
+    function showBoloTab(tab) {
+      document.querySelectorAll('#page-bolos .tab').forEach(function(t) { t.classList.remove('active'); });
+      event.target.classList.add('active');
+      document.getElementById('bolo-list').style.display = tab === 'list' ? 'block' : 'none';
+      document.getElementById('bolo-create').style.display = tab === 'create' ? 'block' : 'none';
+    }
+
+    function showReportTab(tab) {
+      document.querySelectorAll('#page-reports .tab').forEach(function(t) { t.classList.remove('active'); });
+      event.target.classList.add('active');
+      document.getElementById('report-create').style.display = tab === 'create' ? 'block' : 'none';
+      document.getElementById('report-list').style.display = tab === 'list' ? 'block' : 'none';
+    }
+
+    // ============================================================
+    // Dispatch Calls
+    // ============================================================
+    function refreshCalls() {
+      fetch('https://cad-mdt/getActiveCalls', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({}) });
+      fetch('https://cad-mdt/getUnits', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({}) });
+    }
+
+    function refreshUnits() {
+      fetch('https://cad-mdt/getUnits', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({}) });
+    }
+
+    function updateCallUI() {
+      var listEl = document.getElementById('dashboard-calls');
+      var dispatchEl = document.getElementById('dispatch-calls-list');
+      var badge = document.getElementById('dispatch-badge');
+
+      var active = activeCalls.filter(function(c) { return c.status !== 'COMPLETED'; });
+      var p1 = activeCalls.filter(function(c) { return c.priority === 'PRIORITY_1' && c.status !== 'COMPLETED'; });
+
+      document.getElementById('stat-active-calls').textContent = active.length;
+      document.getElementById('stat-priority').textContent = p1.length;
+
+      if (active.length > 0) {
+        badge.style.display = 'inline';
+        badge.textContent = active.length;
+      } else {
+        badge.style.display = 'none';
+      }
+
+      var html = activeCalls.map(function(call) {
+        var pClass = call.priority === 'PRIORITY_1' ? 'p1' : call.priority === 'PRIORITY_2' ? 'p2' : 'p3';
+        var sClass = call.status === 'COMPLETED' ? 'completed' : call.status === 'ASSIGNED' ? 'assigned' : 'pending';
+        return '<div class="call-item">' +
+          '<div class="call-priority ' + pClass + '"></div>' +
+          '<div class="call-info">' +
+            '<div class="call-type">' + escHtml(call.type || 'Unknown') + '</div>' +
+            '<div class="call-location">📍 ' + escHtml(call.location || 'Unknown') + '</div>' +
+            '<div class="call-actions">' +
+              (call.status !== 'COMPLETED' ? '<button class="btn btn-primary btn-sm" onclick="respondToCall(' + call.id + ')">Respond</button>' : '') +
+              (call.status !== 'COMPLETED' ? '<button class="btn btn-secondary btn-sm" onclick="completeCall(' + call.id + ')">Complete</button>' : '') +
+            '</div>' +
+          '</div>' +
+          '<div class="call-meta">' +
+            '<div class="call-time">' + timeAgo(call.created_at) + '</div>' +
+            '<span class="priority-badge ' + sClass + '">' + (call.status || 'PENDING') + '</span>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+
+      if (!html) html = '<div style="text-align:center; padding:30px; color:#484f58;">No dispatch calls</div>';
+      listEl.innerHTML = html;
+      dispatchEl.innerHTML = html;
+    }
+
+    function respondToCall(callId) {
+      fetch('https://cad-mdt/respondToCall', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ callId: callId }) });
+    }
+
+    function completeCall(callId) {
+      fetch('https://cad-mdt/completeCall', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ callId: callId }) });
+    }
+
+    function createDispatchCall() {
+      var data = {
+        type: document.getElementById('dispatch-type').value,
+        priority: document.getElementById('dispatch-priority').value,
+        location: document.getElementById('dispatch-location').value,
+        description: document.getElementById('dispatch-description').value,
+      };
+      if (!data.description) { showToast('Enter a description', 'error'); return; }
+      fetch('https://cad-mdt/createDispatchCall', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
+      showToast('Dispatch call created', 'success');
+      showDispatchTab('active');
+    }
+
+    // ============================================================
+    // Units
+    // ============================================================
+    function updateUnitUI() {
+      document.getElementById('stat-units-on').textContent = allUnits.length;
+      var html = allUnits.map(function(u) {
+        var statusClass = (u.status || 'OFF_DUTY') === 'OFF_DUTY' ? 'off-duty' : (u.status === 'AVAILABLE' ? 'available' : 'busy');
+        return '<div class="unit-item">' +
+          '<div class="unit-dot ' + statusClass + '"></div>' +
+          '<div class="unit-info">' +
+            '<div class="unit-callsign">' + escHtml(u.callsign || 'N/A') + '</div>' +
+            '<div class="unit-dept">' + escHtml(u.department || 'LSPD') + ' • ' + escHtml(u.firstname || '') + ' ' + escHtml(u.lastname || '') + '</div>' +
+          '</div>' +
+          '<div class="unit-status">' + escHtml(u.status || 'OFF_DUTY') + '</div>' +
+        '</div>';
+      }).join('');
+      if (!html) html = '<div style="text-align:center; padding:30px; color:#484f58;">No units on duty</div>';
+      document.getElementById('units-list').innerHTML = html;
+    }
+
+    // ============================================================
+    // Search
+    // ============================================================
+    function searchCivilians() {
+      var q = document.getElementById('civ-search').value;
+      if (!q) return;
+      fetch('https://cad-mdt/searchCivilians', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ query: q }) });
+    }
+
+    function searchVehicles() {
+      var q = document.getElementById('veh-search').value;
+      if (!q) return;
+      fetch('https://cad-mdt/searchVehicles', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ query: q }) });
+    }
+
+    function handleSearchResults(data) {
+      var el;
+      var html = '';
+      if (data.type === 'civilians') {
+        el = document.getElementById('civ-results');
+        var results = data.results || [];
+        if (results.length === 0) { html = '<div style="text-align:center; padding:30px; color:#484f58;">No results found</div>'; }
+        else {
+          html = '<div class="table-container"><table><thead><tr><th>Name</th><th>DOB</th><th>Phone</th><th>Gender</th><th>Licenses</th></tr></thead><tbody>';
+          results.forEach(function(c) {
+            html += '<tr><td>' + escHtml(c.firstname + ' ' + c.lastname) + '</td><td>' + escHtml(c.date_of_birth || 'N/A') + '</td><td>' + escHtml(c.phone || 'N/A') + '</td><td>' + escHtml(c.gender || 'N/A') + '</td><td>' + escHtml(c.license_types || 'None') + '</td></tr>';
+          });
+          html += '</tbody></table></div>';
+        }
+      } else if (data.type === 'vehicles') {
+        el = document.getElementById('veh-results');
+        var results = data.results || [];
+        if (results.length === 0) { html = '<div style="text-align:center; padding:30px; color:#484f58;">No results found</div>'; }
+        else {
+          html = '<div class="table-container"><table><thead><tr><th>Plate</th><th>Model</th><th>Color</th><th>Year</th><th>Owner</th><th>Registration</th><th>Stolen</th></tr></thead><tbody>';
+          results.forEach(function(v) {
+            html += '<tr><td><strong>' + escHtml(v.plate) + '</strong></td><td>' + escHtml(v.model) + '</td><td>' + escHtml(v.color) + '</td><td>' + escHtml(v.year || 'N/A') + '</td><td>' + escHtml((v.firstname || '') + ' ' + (v.lastname || '')) + '</td><td>' + escHtml(v.registration_status) + '</td><td>' + (v.stolen ? '<span style="color:#f85149">⚠️ YES</span>' : '<span style="color:#3fb950">No</span>') + '</td></tr>';
+          });
+          html += '</tbody></table></div>';
+        }
+      }
+      if (el) el.innerHTML = html;
+    }
+
+    function showPlateResult(data) {
+      if (data.found) {
+        showToast(data.plate + ' — ' + data.color + ' ' + data.model + ' | Owner: ' + (data.owner || 'Unknown'), data.stolen ? 'error' : 'success');
+      } else {
+        showToast(data.message || 'Vehicle not found', 'primary');
+      }
+    }
+
+    // ============================================================
+    // BOLOs & Reports
+    // ============================================================
+    function createBOLO() {
+      var data = {
+        type: document.getElementById('bolo-type').value,
+        priority: document.getElementById('bolo-priority').value,
+        description: document.getElementById('bolo-description').value,
+        location: document.getElementById('bolo-location').value,
+      };
+      if (!data.description) { showToast('Enter a description', 'error'); return; }
+      fetch('https://cad-mdt/createBOLO', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
+      showToast('BOLO created', 'success');
+      showBoloTab('list');
+    }
+
+    function createReport() {
+      var data = {
+        type: document.getElementById('report-type').value,
+        location: document.getElementById('report-location').value,
+        narrative: document.getElementById('report-narrative').value,
+        tableName: 'incident_reports',
+        prefix: 'INC',
+      };
+      if (!data.narrative) { showToast('Write a narrative', 'error'); return; }
+      fetch('https://cad-mdt/createReport', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
+      showToast('Report submitted', 'success');
+    }
+
+    // ============================================================
+    // ID Card
+    // ============================================================
+    function showIDCard(char) {
+      if (!char) return;
+      document.getElementById('idcard-overlay').classList.add('visible');
+      document.getElementById('idcard-name').textContent = char.firstName + ' ' + char.lastName;
+      var details = '<div><strong>DOB:</strong> ' + (char.dateOfBirth || 'N/A') + '</div>';
+      details += '<div><strong>Gender:</strong> ' + (char.gender || 'N/A') + '</div>';
+      details += '<div><strong>Address:</strong> ' + (char.address || 'N/A') + '</div>';
+      details += '<div><strong>Phone:</strong> ' + (char.phone || 'N/A') + '</div>';
+      document.getElementById('idcard-details').innerHTML = details;
+
+      // Licenses
+      var licHtml = '';
+      if (char.licenses && char.licenses.length > 0) {
+        licHtml = '<div class="idcard-section-title">LICENSES</div>';
+        char.licenses.forEach(function(l) {
+          var cls = l.status === 'VALID' ? 'valid' : 'invalid';
+          licHtml += '<span class="idcard-tag ' + cls + '">' + l.type.toUpperCase() + ' — ' + l.number + '</span>';
+        });
+      }
+      document.getElementById('idcard-licenses').innerHTML = licHtml;
+
+      // Vehicles
+      var vehHtml = '';
+      if (char.vehicles && char.vehicles.length > 0) {
+        vehHtml = '<div class="idcard-section-title">REGISTERED VEHICLES</div>';
+        char.vehicles.forEach(function(v) {
+          vehHtml += '<span class="idcard-tag">' + v.plate + ' — ' + v.color + ' ' + v.model + '</span>';
+        });
+      }
+      document.getElementById('idcard-vehicles').innerHTML = vehHtml;
+
+      // Criminal Record
+      var crimHtml = '';
+      var total = (char.citationCount || 0) + (char.warningCount || 0) + (char.arrestCount || 0);
+      if (total > 0 || (char.warrants && char.warrants.length > 0)) {
+        crimHtml = '<div class="idcard-section-title">RECORD</div>';
+        if (char.arrestCount) crimHtml += '<span class="idcard-tag invalid">ARRESTS: ' + char.arrestCount + '</span>';
+        if (char.citationCount) crimHtml += '<span class="idcard-tag warning">CITATIONS: ' + char.citationCount + '</span>';
+        if (char.warningCount) crimHtml += '<span class="idcard-tag warning">WARNINGS: ' + char.warningCount + '</span>';
+        if (char.warrants) {
+          char.warrants.forEach(function(w) {
+            crimHtml += '<div class="idcard-tag invalid" style="display:block; margin-top:4px;">⚠️ WARRANT: ' + escHtml(w.charges || 'N/A') + '</div>';
+          });
+        }
+      } else {
+        crimHtml = '<div style="font-size:10px; color:rgba(39,174,96,0.8);">✓ Clean Record</div>';
+      }
+      document.getElementById('idcard-criminal').innerHTML = crimHtml;
+    }
+
+    // ============================================================
+    // NPC Forms
+    // ============================================================
+    function showNPCForm(type, data) {
+      if (type === 'civreg') {
+        var html = '<div class="card"><h3 style="color:#e6edf3; margin-bottom:16px;">📋 Civilian Registration — ' + escHtml(data.location) + '</h3>';
+        html += '<div class="form-row"><div class="form-group"><label class="form-label">First Name</label><input class="form-input" id="npc-firstname" value="' + escHtml(data.firstName || '') + '"></div>';
+        html += '<div class="form-group"><label class="form-label">Last Name</label><input class="form-input" id="npc-lastname" value="' + escHtml(data.lastName || '') + '"></div></div>';
+        html += '<div class="form-row"><div class="form-group"><label class="form-label">Date of Birth</label><input class="form-input" id="npc-dob" type="date"></div>';
+        html += '<div class="form-group"><label class="form-label">Gender</label><select class="form-select" id="npc-gender"><option>Male</option><option>Female</option><option>Other</option></select></div></div>';
+        html += '<div class="form-group"><label class="form-label">Address</label><input class="form-input" id="npc-address" placeholder="Enter address..."></div>';
+        html += '<div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="npc-phone" placeholder="Enter phone number..."></div>';
+        html += '<div style="display:flex; gap:8px; justify-content:flex-end;">';
+        html += '<button class="btn btn-secondary" onclick="cancelNPC()">Cancel</button>';
+        html += '<button class="btn btn-primary" onclick="submitCivReg()">Register</button></div></div>';
+        document.getElementById('page-dashboard').insertAdjacentHTML('beforeend', '<div id="npc-form-overlay" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:99998;background:#0d1117;overflow-y:auto;padding:20px;">' + html + '</div>');
+      }
+      else if (type === 'dmv') {
+        var html = '<div class="card"><h3 style="color:#e6edf3; margin-bottom:16px;">🚗 Vehicle Registration — ' + escHtml(data.location) + '</h3>';
+        html += '<div class="form-row"><div class="form-group"><label class="form-label">Plate</label><input class="form-input" id="npc-plate" value="' + escHtml(data.plate || '') + '"></div>';
+        html += '<div class="form-group"><label class="form-label">Model</label><input class="form-input" id="npc-model" value="' + escHtml(data.model || '') + '"></div></div>';
+        html += '<div class="form-row"><div class="form-group"><label class="form-label">Color</label><input class="form-input" id="npc-color" value="' + escHtml(data.color || '') + '"></div>';
+        html += '<div class="form-group"><label class="form-label">Year</label><input class="form-input" id="npc-year" value="' + escHtml(data.year || '') + '"></div></div>';
+        html += '<p style="font-size:12px; color:#8b949e; margin-top:8px;">Cost: $' + (data.cost || 0) + '</p>';
+        html += '<div style="display:flex; gap:8px; justify-content:flex-end;">';
+        html += '<button class="btn btn-secondary" onclick="cancelNPC()">Cancel</button>';
+        html += '<button class="btn btn-primary" onclick="submitDMV()">Register Vehicle</button></div></div>';
+        document.getElementById('page-dashboard').insertAdjacentHTML('beforeend', '<div id="npc-form-overlay" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:99998;background:#0d1117;overflow-y:auto;padding:20px;">' + html + '</div>');
+      }
+      else if (type === 'gunlicense') {
+        var html = '<div class="card"><h3 style="color:#e6edf3; margin-bottom:16px;">🔫 Gun License Application — ' + escHtml(data.location) + '</h3>';
+        html += '<p style="font-size:13px; color:#8b949e; margin-bottom:16px;">You must have a valid driver\'s license. A weapon license will be issued if you qualify.</p>';
+        html += '<div style="display:flex; gap:8px; justify-content:flex-end;">';
+        html += '<button class="btn btn-secondary" onclick="cancelNPC()">Cancel</button>';
+        html += '<button class="btn btn-primary" onclick="submitGunLicense()">Apply</button></div></div>';
+        document.getElementById('page-dashboard').insertAdjacentHTML('beforeend', '<div id="npc-form-overlay" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:99998;background:#0d1117;overflow-y:auto;padding:20px;">' + html + '</div>');
+      }
+      else if (type === 'insurance') {
+        var html = '<div class="card"><h3 style="color:#e6edf3; margin-bottom:16px;">🛡️ Vehicle Insurance — ' + escHtml(data.location) + '</h3>';
+        html += '<div class="form-group"><label class="form-label">Plate Number</label><input class="form-input" id="npc-insplate" placeholder="Enter plate..."></div>';
+        html += '<div style="display:flex; gap:8px; justify-content:flex-end;">';
+        html += '<button class="btn btn-secondary" onclick="cancelNPC()">Cancel</button>';
+        html += '<button class="btn btn-primary" onclick="submitInsurance()">Get Insurance</button></div></div>';
+        document.getElementById('page-dashboard').insertAdjacentHTML('beforeend', '<div id="npc-form-overlay" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:99998;background:#0d1117;overflow-y:auto;padding:20px;">' + html + '</div>');
+      }
+    }
+
+    function cancelNPC() {
+      var el = document.getElementById('npc-form-overlay');
+      if (el) el.remove();
+      fetch('https://cad-mdt/cancelNPCInteraction', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({}) });
+    }
+
+    function submitCivReg() {
+      var data = {
+        firstName: document.getElementById('npc-firstname').value,
+        lastName: document.getElementById('npc-lastname').value,
+        dateOfBirth: document.getElementById('npc-dob').value,
+        gender: document.getElementById('npc-gender').value,
+        address: document.getElementById('npc-address').value,
+        phone: document.getElementById('npc-phone').value,
+      };
+      if (!data.firstName || !data.lastName) { showToast('Name required', 'error'); return; }
+      fetch('https://cad-mdt/submitCivilianRegistration', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
+      showToast('Civilian registered!', 'success');
+      cancelNPC();
+    }
+
+    function submitDMV() {
+      var data = {
+        plate: document.getElementById('npc-plate').value,
+        model: document.getElementById('npc-model').value,
+        color: document.getElementById('npc-color').value,
+        year: document.getElementById('npc-year').value,
+      };
+      if (!data.plate) { showToast('Plate required', 'error'); return; }
+      fetch('https://cad-mdt/submitVehicleRegistration', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
+      showToast('Vehicle registered!', 'success');
+      cancelNPC();
+    }
+
+    function submitGunLicense() {
+      fetch('https://cad-mdt/submitGunLicense', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({}) });
+      showToast('Gun license application submitted', 'success');
+      cancelNPC();
+    }
+
+    function submitInsurance() {
+      var plate = document.getElementById('npc-insplate').value;
+      if (!plate) { showToast('Enter a plate', 'error'); return; }
+      fetch('https://cad-mdt/submitInsurance', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ plate: plate }) });
+      showToast('Insurance applied', 'success');
+      cancelNPC();
+    }
+
+    // ============================================================
+    // Toasts
+    // ============================================================
+    function showToast(msg, type) {
+      var container = document.getElementById('toast-container');
+      var toast = document.createElement('div');
+      toast.className = 'toast ' + (type || 'primary');
+      toast.textContent = msg;
+      container.appendChild(toast);
+      setTimeout(function() { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.3s'; setTimeout(function() { toast.remove(); }, 300); }, 4000);
+    }
+
+    // ============================================================
+    // Utilities
+    // ============================================================
+    function escHtml(s) {
+      if (!s) return '';
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function timeAgo(dateStr) {
+      if (!dateStr) return '';
+      var now = new Date();
+      var then = new Date(dateStr);
+      var diff = Math.floor((now - then) / 1000);
+      if (diff < 60) return diff + 's ago';
+      if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+      if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+      return Math.floor(diff / 86400) + 'd ago';
+    }
+
+    // Escape key to close ID card
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        if (document.getElementById('idcard-overlay').classList.contains('visible')) {
+          document.getElementById('idcard-overlay').classList.remove('visible');
+          fetch('https://cad-mdt/cancelNPCInteraction', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({}) });
+        } else if (appVisible) {
+          closeMDT();
+        }
+      }
+    });
+  </script>
+</body>
 </html>
