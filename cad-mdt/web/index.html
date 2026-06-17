@@ -48,7 +48,13 @@
         </div>
 
         <!-- Licenses -->
-        <div id="idcard-licenses" style="padding:0 20px 12px;"></div>
+        <div id="idcard-licenses" style="padding:0 20px 8px;"></div>
+
+        <!-- Vehicles -->
+        <div id="idcard-vehicles" style="padding:0 20px 8px;"></div>
+
+        <!-- Criminal Record -->
+        <div id="idcard-criminal" style="padding:0 20px 12px;"></div>
 
         <!-- Footer -->
         <div style="background:rgba(0,0,0,0.3); padding:10px 20px; display:flex; justify-content:space-between; align-items:center;">
@@ -70,6 +76,12 @@
           overlay.style.display = 'flex';
           overlay.style.alignItems = 'center';
           overlay.style.justifyContent = 'center';
+
+        } else if (data.action === 'setHeadshot') {
+          var portrait = document.getElementById('idcard-portrait');
+          if (portrait && data.textureDict && data.textureName) {
+            portrait.innerHTML = '<img src="nui://' + data.textureDict + '/' + data.textureName + '" style="width:100%; height:100%; object-fit:cover; border-radius:8px;" onerror="this.style.display=\'none\'">';
+          }
 
           // Name
           document.getElementById('idcard-name').textContent = char.firstName + ' ' + char.lastName;
@@ -94,6 +106,46 @@
             licHtml += '</div>';
           }
           document.getElementById('idcard-licenses').innerHTML = licHtml;
+
+          // Vehicles
+          var vehEl = document.getElementById('idcard-vehicles');
+          if (vehEl) {
+            var vehHtml = '';
+            if (char.vehicles && char.vehicles.length > 0) {
+              vehHtml += '<div style="font-size:10px; color:rgba(255,255,255,0.5); margin-bottom:4px; letter-spacing:1px;">REGISTERED VEHICLES</div>';
+              vehHtml += '<div style="display:flex; flex-wrap:wrap; gap:4px;">';
+              char.vehicles.forEach(function(v) {
+                vehHtml += '<span style="font-size:10px; background:rgba(255,255,255,0.1); padding:3px 8px; border-radius:4px; color:rgba(255,255,255,0.8);">' + v.plate + ' - ' + v.color + ' ' + v.model + '</span>';
+              });
+              vehHtml += '</div>';
+            } else {
+              vehHtml = '<div style="font-size:10px; color:rgba(255,255,255,0.4);">No registered vehicles</div>';
+            }
+            vehEl.innerHTML = vehHtml;
+          }
+
+          // Criminal Record
+          var crimEl = document.getElementById('idcard-criminal');
+          if (crimEl) {
+            var crimHtml = '';
+            var total = (char.citationCount || 0) + (char.warningCount || 0) + (char.arrestCount || 0);
+            if (total > 0 || (char.warrants && char.warrants.length > 0)) {
+              crimHtml += '<div style="font-size:10px; color:rgba(255,255,255,0.5); margin-bottom:4px; letter-spacing:1px;">RECORD</div>';
+              crimHtml += '<div style="display:flex; flex-wrap:wrap; gap:6px;">';
+              if (char.arrestCount) crimHtml += '<span style="font-size:10px; background:rgba(231,76,60,0.2); border-left:3px solid #e74c3c; padding:3px 8px; border-radius:4px; color:rgba(255,255,255,0.8);">ARRESTS: ' + char.arrestCount + '</span>';
+              if (char.citationCount) crimHtml += '<span style="font-size:10px; background:rgba(243,156,18,0.2); border-left:3px solid #f39c12; padding:3px 8px; border-radius:4px; color:rgba(255,255,255,0.8);">CITATIONS: ' + char.citationCount + '</span>';
+              if (char.warningCount) crimHtml += '<span style="font-size:10px; background:rgba(241,196,15,0.2); border-left:3px solid #f1c40f; padding:3px 8px; border-radius:4px; color:rgba(255,255,255,0.8);">WARNINGS: ' + char.warningCount + '</span>';
+              crimHtml += '</div>';
+              if (char.warrants && char.warrants.length > 0) {
+                char.warrants.forEach(function(w) {
+                  crimHtml += '<div style="margin-top:4px; font-size:10px; background:rgba(231,76,60,0.15); border-left:3px solid #e74c3c; padding:4px 8px; border-radius:4px; color:rgba(255,255,255,0.9);">⚠️ WARRANT ' + w.warrantNumber + ': ' + (w.charges || 'N/A') + '</div>';
+                });
+              }
+            } else {
+              crimHtml = '<div style="font-size:10px; color:rgba(39,174,96,0.8);">✓ Clean Record</div>';
+            }
+            crimEl.innerHTML = crimHtml;
+          }
 
         } else if (data.action === 'hideIDCard') {
           document.getElementById('idcard-overlay').style.display = 'none';
