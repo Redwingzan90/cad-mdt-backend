@@ -7,7 +7,7 @@ Config = {}
 -- API Settings
 -- ============================================================
 Config.API = {
-    URL = "http://localhost:3001", -- Backend API URL
+    URL = "https://cad-mdt-backend.onrender.com", -- Backend API URL
     ServerKey = "cfxk_1kRjwnUDp7fMl0AGeWZHe_1U24R2", -- Must match backend FIVEM_SERVER_KEY
     Timeout = 10000, -- Request timeout in ms
 }
