@@ -1,0 +1,54 @@
+-- Police CAD/MDT System - Exports
+-- exports.lua
+-- This file documents all available exports for the CAD/MDT resource.
+-- Include this in other resources to use CAD exports.
+
+-- ============================================================
+-- CLIENT EXPORTS
+-- ============================================================
+-- Use these in other client scripts:
+--
+-- local status = exports['cad-mdt']:GetOfficerStatus()
+-- local onDuty = exports['cad-mdt']:IsOfficerOnDuty()
+-- local callsign = exports['cad-mdt']:GetOfficerCallsign()
+--
+-- Returns:
+--   GetOfficerStatus() -> string: "AVAILABLE", "BUSY", "EN_ROUTE", etc.
+--   IsOfficerOnDuty() -> boolean
+--   GetOfficerCallsign() -> string | nil
+
+-- ============================================================
+-- SERVER EXPORTS
+-- ============================================================
+-- Use these in other server scripts:
+--
+-- local info = exports['cad-mdt']:GetOfficerInfo(source)
+-- exports['cad-mdt']:GetActiveCalls(function(calls) ... end)
+-- exports['cad-mdt']:SubmitEmergencyCall({ ... }, function(success, result) ... end)
+-- exports['cad-mdt']:RunPlateCheck("ABC1234", function(success, result) ... end)
+--
+-- Returns:
+--   GetOfficerInfo(source) -> { onDuty, callsign, department, identifier } | nil
+--   GetActiveCalls(cb) -> calls array via callback
+--   SubmitEmergencyCall(data, cb) -> success via callback
+--   RunPlateCheck(plate, cb) -> plate result via callback
+
+-- ============================================================
+-- EVENTS (for other resources to listen to)
+-- ============================================================
+--
+-- Client Events:
+--   'cad:duty:statusChanged' -> { onDuty: bool, officer: table }
+--   'cad:dispatch:newCall'   -> call data
+--   'cad:dispatch:callUpdate' -> call data
+--   'cad:bolo:alert'         -> bolo data
+--   'cad:plate:result'       -> plate result
+--   'cad:notification'       -> notification data
+--
+-- Server Events:
+--   'cad:duty:on'            -> (identifier, callsign, departmentCode)
+--   'cad:duty:off'           -> (identifier)
+--   'cad:emergency:call'     -> { callerName, description, location, ... }
+--   'cad:plate:check'        -> (plate)
+--   'cad:location:update'    -> (lat, lng)
+--   'cad:status:update'      -> (status, detail)
